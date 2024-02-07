@@ -59,7 +59,7 @@ def cs_pos(x, y): return cs(x, y, parameters["D_p"], parameters["R_p"])
 def cs_neg(x, y): return cs(x, y, parameters["D_n"], parameters["R_n"])
 
 
-geom = dde.geometry.Interval(0, parameters["R_p"])
+geom = dde.geometry.Sphere([0], parameters["R_p"])
 timedomain = dde.geometry.TimeDomain(0, 100)
 geomtime = dde.geometry.GeometryXTime(geom, timedomain)
 
