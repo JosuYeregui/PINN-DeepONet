@@ -6,6 +6,11 @@ import numpy as np
 import torch
 import pybamm
 
+import os
+
+os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"   # see issue #152
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
 param = pybamm.ParameterValues("Chen2020")
 PBM_model = pybamm.lithium_ion.SPM()
 
@@ -28,11 +33,6 @@ parameters = {
     "c_n_max": param["Maximum concentration in negative electrode [mol.m-3]"],
     "D_p": param["Positive electrode diffusivity [m2.s-1]"],
     "D_n": param["Negative electrode diffusivity [m2.s-1]"],
-    "t_plus": param["Cation transference number"],
-    "por_pos": param["Positive electrode porosity"],
-    "por_neg": param["Negative electrode porosity"],
-    "D_e": param["Electrolyte diffusivity [m2.s-1]"](1000, 298.15),
-    "ce_0": param["Initial concentration in electrolyte [mol.m-3]"],
     "SOL_neg": [0.002, 0.7619],
     "SOL_pos": [0.9332, 0.3987],
     "F": 96485.33212,
@@ -41,47 +41,64 @@ parameters = {
 }
 
 SOC_t0 = 1.
+t_end = 3600.
 cs_ini_p = parameters["SOL_pos"][0] + ((parameters["SOL_pos"][1] - parameters["SOL_pos"][0]) * SOC_t0)
-I = 5
+print(cs_ini_p)
+I = -5
 experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
 sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
 sol = sim.solve(initial_soc=SOC_t0)
 
+# print(np.power(parameters["R_p"], 2) * I / (
+#                 3 * param["Positive electrode active material volume fraction"] *
+#                 parameters["D_p"] * parameters["L_p"] * parameters["F"] *
+#                 parameters["A"] * parameters["c_p_max"]))
+
 
 # PDE
-def ce(x, y):
+def cs(x, y):
+    D = parameters["D_p"]
+    R = parameters["R_p"]
     dy_t = dde.grad.jacobian(y, x, j=1)
-    dc_x = dde.grad.jacobian(y, x, j=0)
-    N = -parameters["por_neg"] * parameters["D_e"] * dc_x + x[:, 0] * parameters["t_plus"] * I * parameters["R"] * parameters["T"] / (parameters["F"] * parameters["L_n"])
-    dN_x = dde.grad.jacobian(N, x, j=0)
-    return dy_t * parameters["por_neg"] - (dN_x + I / (parameters["F"] * parameters["L_n"]))
+    dy_x = dde.grad.jacobian(y, x, j=0)
+    N_xx = dde.grad.jacobian(dy_x * torch.pow(x[:, 0], 2).view(-1, 1), x, j=0)
+    return dy_t * torch.pow(x[:, 0], 2).view(-1, 1) - D/np.power(R, 2) * N_xx
+    # N_xx = dde.grad.hessian(y, x, j=0)
+    # return dy_t - D / np.power(R, 2) * N_xx
 
 
-geom = dde.geometry.Interval(0, parameters["L_n"])
-timedomain = dde.geometry.TimeDomain(0, 3600)
+
+geom = dde.geometry.Interval(0, 1)
+timedomain = dde.geometry.TimeDomain(0, t_end)
 geomtime = dde.geometry.GeometryXTime(geom, timedomain)
 
+
+def bc_func(x):
+    # return parameters["R_p"] * (-I / (np.power(x[:, 0], 2) * parameters["D_p"] * parameters["L_p"] * parameters["as_p"] * parameters["F"] * parameters["A"] * parameters["c_p_max"])) # parameters["R_p"] *
+    return np.ones_like(x[:, 0]) * np.power(parameters["R_p"], 2) * I / (
+                3 * param["Positive electrode active material volume fraction"] *
+                parameters["D_p"] * parameters["L_p"] * parameters["F"] *
+                parameters["A"] * parameters["c_p_max"])
 
 def boundary_l(x, on_boundary):
     return on_boundary and dde.utils.isclose(x[0], 0)
 
+def boundary_r(x, on_boundary):
+    return on_boundary and dde.utils.isclose(x[0], 1)
 
-def bc_func(x):
-    return x[:, 0] * I * parameters["R"] * parameters["T"] / (parameters["F"] * parameters["L_n"]) * parameters["por_neg"] * parameters["D_e"]
 
-
-# bc = dde.icbc.NeumannBC(geomtime, bc_func, lambda _, on_boundary: on_boundary)
-bc = dde.icbc.NeumannBC(geomtime, lambda x: 0, boundary_l)
-ic = dde.icbc.IC(geomtime, lambda _: parameters["ce_0"], lambda _, on_initial: on_initial)
+bc_r = dde.icbc.NeumannBC(geomtime, bc_func, boundary_r)
+bc_l = dde.icbc.NeumannBC(geomtime, lambda x: 0, boundary_l)
+ic = dde.icbc.IC(geomtime, lambda _: cs_ini_p, lambda _, on_initial: on_initial)
 
 data = dde.data.TimePDE(
     geomtime,
-    ce,
-    [bc, ic],
-    num_domain=200,
-    num_boundary=40,
+    cs,
+    [bc_l, bc_r, ic],
+    num_domain=1000,
+    num_boundary=20,
     num_initial=20,
-    num_test=500,
+    num_test=100,
 )
 
 # # Function space
@@ -107,16 +124,41 @@ initializer = "Glorot uniform"
 net = dde.nn.FNN(layer_size, activation, initializer)
 
 model = dde.Model(data, net)
-model.compile("adam", lr=0.01)
-losshistory, train_state = model.train(iterations=5000)
+model.compile("adam", lr=0.0001)
+losshistory, train_state = model.train(iterations=15000)
+model.compile("L-BFGS-B")
+losshistory, train_state = model.train(callbacks=[dde.callbacks.EarlyStopping(patience=100)])
 dde.utils.plot_loss_history(losshistory)
 
 # dde.saveplot(losshistory, train_state, issave=True, isplot=True)
-t = np.linspace(0, 3600, num=50)
-x = np.ones(50)
+t = np.linspace(0, t_end, num=1000)
+x = np.ones(1000)
 a = np.array([x, t]).T
 u = np.ravel(model.predict(a))
 
 plt.figure()
 plt.plot(t, u, "r")
 plt.show()
+
+# dde.saveplot(losshistory, train_state, issave=True, isplot=True)
+t = np.linspace(0, t_end, num=1000)
+x = np.zeros(1000)
+a = np.array([x, t]).T
+u = np.ravel(model.predict(a))
+
+plt.figure()
+plt.plot(t, u, "r")
+plt.show()
+
+# u_2 = model.predict(torch.tensor(a))
+#
+# def cs_2(x, y):
+#     D = parameters["D_p"]
+#     R = parameters["R_p"]
+#     dy_t = dde.grad.jacobian(y, x, j=1)
+#     dy_x = dde.grad.jacobian(y, x, j=0)
+#     N_xx = dde.grad.jacobian(dy_x * torch.pow(x[:, 0], 2), x, j=0)
+#     # dy_xx = dde.grad.hessian(y, x, j=0)
+#     return dy_t * torch.pow(x[:, 0], 2) - D/np.power(R, 2) * N_xx
+#
+# print(cs_2(a, u_2))
