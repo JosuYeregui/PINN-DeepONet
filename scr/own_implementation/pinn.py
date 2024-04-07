@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from sampling import sample
 import numpy as np
 
 
@@ -22,43 +23,9 @@ class PINN(nn.Module):
     def update_model(self, model):
         self.model = model
 
+    def train(self):
+        loss = 0
 
-class Pos_Electrode(PINN):
-
-    def __int__(self, model, parameters, criterion=nn.MSELoss()):
-        super().__init__(model, criterion)
-
-        self.params = parameters
-
-    def pde(self, r, t, c):
-
-        dcdt = torch.autograd.grad(c, t, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-
-        dcdr = torch.autograd.grad(c, r, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-        dr2Ndr = torch.autograd.grad(dcdr * torch.pow(r, 2), r, grad_outputs=torch.ones_like(dcdr),
-                                     create_graph=True)[0]
-
-        return dcdt * torch.pow(r, 2) - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr
-
-    def bc_centre(self, r, t, c):
-
-        dcdt = torch.autograd.grad(c, t, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-
-        return dcdt
-
-    def bc_surf(self, r, t, c):
-        # TODO
-
-        dcdt = torch.autograd.grad(c, t, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-
-        return dcdt
-
-    def iv(self, c0, SOC):
-
-        return c0 - self.params["SOL_pos"][0] + ((self.params["SOL_pos"][1] - self.params["SOL_pos"][0]) * SOC)
-
+        for func in self.loss_factors["pde"]:
+            loss += self.criterion()
 
