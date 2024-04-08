@@ -70,7 +70,7 @@ class FFNN(nn.Module):
     def forward(self, x):
         output = self.tanh(self.l1(x))
         output = self.tanh(self.l2(output))
-        output = self.tanh(self.l3(output))
+        # output = self.tanh(self.l3(output))
         output = self.l4(output)
         return output
 

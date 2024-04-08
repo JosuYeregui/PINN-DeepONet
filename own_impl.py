@@ -20,13 +20,13 @@ if __name__ == "__main__":
     validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
 
     model = FFNN(2, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
     PINN_pos = Solid_Phase(model, parameters)
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(10000 + 1):
+    for j in range(20000 + 1):
 
         loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
 
