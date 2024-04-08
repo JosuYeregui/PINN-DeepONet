@@ -1,5 +1,6 @@
-from pinn import PINN
-from sampling import sample
+from scr.pinn import PINN
+from scr.sampling import sample
+
 import torch
 from torch import nn
 import numpy as np
@@ -42,7 +43,7 @@ class Solid_Phase(PINN):
         bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=1)
         c_bcs = self(bcs_sample)
 
-        loss.append(self.criterion(self._bc_surf(bcs_sample, c_bcs, self.params["I_typ"]), torch.zeros_like(c_bcs)))
+        loss.append(self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.params["I_typ"]), torch.zeros_like(c_bcs)))
 
         hist = np.array([l.detach().numpy() for l in loss])
 
@@ -58,7 +59,7 @@ class Solid_Phase(PINN):
         dr2Ndr = torch.autograd.grad(dcdx[:, 1] * torch.pow(x[:, 1], 2), x, grad_outputs=torch.ones_like(dcdx[:, 1]),
                                      create_graph=True)[0]
 
-        return dcdx[:, 0] * torch.pow(x[:, 1], 2) - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr[:, 1]
+        return dcdx[:, 0] * torch.pow(x[:, 1], 2) / 3600. - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr[:, 1]
 
     def _bc_centre(self, x, c):
 
@@ -73,9 +74,9 @@ class Solid_Phase(PINN):
                                    create_graph=True)[0]
 
         return dcdr[:, 1] - np.power(self.params["R_p"], 2) * I / (
-                3 * self.params["as_p"] * self.params["D_p"] * self.params["L_p"] * self.params["F"] *
+                3 * self.params["eps_p"] * self.params["D_p"] * self.params["L_p"] * self.params["F"] *
                 self.params["A"] * self.params["c_p_max"])
 
     def _iv(self, c0, SOC):
 
-        return c0 - self.params["SOL_pos"][0] + ((self.params["SOL_pos"][1] - self.params["SOL_pos"][0]) * SOC)
+        return c0 - (self.params["SOL_pos"][0] + ((self.params["SOL_pos"][1] - self.params["SOL_pos"][0]) * SOC))

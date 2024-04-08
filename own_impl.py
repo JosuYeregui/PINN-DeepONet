@@ -1,9 +1,11 @@
 from scr.SPM import Solid_Phase
 from scr.pinn import FFNN
+from scr.utils import load_params
 
 import pybamm
 import torch
 import numpy as np
+import pickle
 
 import matplotlib.pyplot as plt
 
@@ -12,53 +14,68 @@ np.set_printoptions(precision=3)
 
 if __name__ == "__main__":
 
-    param = pybamm.ParameterValues("Chen2020")
-    PBM_model = pybamm.lithium_ion.SPM()
+    parameters = load_params()
 
-    parameters = {
-        "E_p": lambda sto: -0.8090 * sto + 4.4875 - 0.0428 * torch.tanh(18.5138 * (sto - 0.5542)) -
-                           17.7326 * torch.tanh(15.7890 * (sto - 0.3117)) + 17.5842 * torch.tanh(
-            15.9308 * (sto - 0.3120)),
-        "E_n": lambda sto: 1.9793 * torch.exp(-39.3631 * sto) + 0.2482 - 0.0909 * torch.tanh(29.8538 * (sto - 0.1234)) -
-                           0.04478 * torch.tanh(14.9159 * (sto - 0.2769)) - 0.0205 * torch.tanh(
-            30.4444 * (sto - 0.6103)),
-        "I_typ": 5,
-        "SOC_0": 1.,
-        "L_p": param["Positive electrode thickness [m]"],
-        "L_n": param["Negative electrode thickness [m]"],
-        "R_p": param["Positive particle radius [m]"],
-        "R_n": param["Negative particle radius [m]"],
-        "A": param["Electrode height [m]"] * param["Electrode width [m]"],
-        "as_p": 3 * param["Positive electrode active material volume fraction"] / param["Positive particle radius [m]"],
-        "as_n": 3 * param["Negative electrode active material volume fraction"] / param["Negative particle radius [m]"],
-        "alpha_p": param["Positive electrode charge transfer coefficient"],
-        "alpha_n": param["Negative electrode charge transfer coefficient"],
-        "c_p_max": param["Maximum concentration in positive electrode [mol.m-3]"],
-        "c_n_max": param["Maximum concentration in negative electrode [mol.m-3]"],
-        "D_p": param["Positive electrode diffusivity [m2.s-1]"],
-        "D_n": param["Negative electrode diffusivity [m2.s-1]"],
-        "SOL_neg": [0.002, 0.7619],
-        "SOL_pos": [0.9332, 0.3987],
-        "F": 96485.33212,
-        "R": 8.314462,
-        "T": 298.15
-    }
-
-    training_points = {"PDE": 100, "IV": 20, "BC_Center": 20, "BC_Surf": 20}
+    training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
     validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
 
     model = FFNN(2, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     PINN_pos = Solid_Phase(model, parameters)
 
-    print("Iter \t\t PDE \t BC Centre \t BC Surf \t IV \t\t\t PDE \t BC Centre \t BC Surf \t IV")
+    history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
+
+    print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(10000 + 1):
 
         loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
 
         if j % 1000 == 0:
             print(j, "\t\t", losses_tr, "\t\t", losses_val)
+            history["loss_tr"].append(loss_tr)
+            history["losses_tr"].append(losses_tr)
+            history["loss_val"].append(loss_val)
+            history["losses_val"].append(losses_val)
+            history["iteration"].append(j)
+
+    # PINN_pos.save_model("/models/previous.pt")
+    #
+    # with open('models/previous.pkl', 'wb') as fp:
+    #     pickle.dump(history, fp)
 
     # Plot
+    plt.figure()
+    plt.grid("on")
+    plt.semilogy(history["iteration"], history["loss_tr"], label="Training")
+    plt.semilogy(history["iteration"], history["loss_val"], label="Validation")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.legend()
+    plt.show()
 
+    # Evaluation
+    param = pybamm.ParameterValues("ORegan2022")
+    PBM_model = pybamm.lithium_ion.SPM()
+    I = -5
+    experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
+    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
+    sol = sim.solve(initial_soc=1)
 
+    pos_SPM = sol['X-averaged positive particle concentration'].entries[-1, :]
+    t_end = 3600.
+
+    t = np.linspace(0, t_end, num=len(pos_SPM))/3600.
+
+    bcs_sample_t = torch.linspace(0., 1., 1000)
+    bcs_sample_r = torch.ones_like(bcs_sample_t)
+    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r]).t()
+    c_bcs = PINN_pos(bcs_sample)
+
+    plt.figure()
+    plt.grid("on")
+    plt.plot(bcs_sample_t.detach().numpy(), c_bcs.detach().numpy(), "k", label="PINN")
+    plt.plot(t, pos_SPM, "r", label="Pybamm")
+    plt.legend()
+    plt.xlabel("t [h]")
+    plt.ylabel("x [-]")
+    plt.show()

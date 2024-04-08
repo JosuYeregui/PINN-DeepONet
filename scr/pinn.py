@@ -1,7 +1,5 @@
 import torch
 from torch import nn
-from sampling import sample
-import numpy as np
 
 
 class PINN(nn.Module):
@@ -25,12 +23,13 @@ class PINN(nn.Module):
         self.model = model
 
     def save_model(self, PATH):
-        torch.save(self.model.state_dict(), PATH)
+        torch.save(self.model, PATH)
 
     def load_model(self, PATH):
-        self.model.load_state_dict(torch.load(PATH))
+        self.model = torch.load(torch.load(PATH))
+        self.model.eval()
 
-    def compute_loss(self):
+    def compute_loss(self, points):
         raise NotImplementedError
 
     def train_step(self, optimizer, train_points, val_points=None):
@@ -48,9 +47,9 @@ class PINN(nn.Module):
         optimizer.step()
 
         if val_points is not None:
-            self.model.eval(val_points)
+            self.model.eval()
             # Compute the loss and its gradients
-            loss_val, losses_val = self.compute_loss()
+            loss_val, losses_val = self.compute_loss(val_points)
             loss_val = loss_val.detach().numpy()
         else:
             loss_val = 0.

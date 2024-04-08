@@ -27,3 +27,4 @@ def quasirandom(n_samples, dimension):
         skip = 1
     space = [(0.0, 1.0)] * dimension
     return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
+
