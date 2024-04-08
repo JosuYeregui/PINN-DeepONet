@@ -3,9 +3,13 @@ from pinn import FFNN
 import pybamm
 import torch
 from torch import nn
+import numpy as np
+
+np.set_printoptions(precision=3)
 
 
 if __name__ == "__main__":
+
     param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
@@ -17,6 +21,7 @@ if __name__ == "__main__":
                            0.04478 * torch.tanh(14.9159 * (sto - 0.2769)) - 0.0205 * torch.tanh(
             30.4444 * (sto - 0.6103)),
         "I_typ": 5,
+        "SOC_0": 1.,
         "L_p": param["Positive electrode thickness [m]"],
         "L_n": param["Negative electrode thickness [m]"],
         "R_p": param["Positive particle radius [m]"],
@@ -38,10 +43,13 @@ if __name__ == "__main__":
     }
 
     model = FFNN(2, 1)
-    optimizer = torch.optim.Adam(model.parameters(),lr=0.001)
-    pinn_cp = Solid_Phase(model, parameters)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
+    pinn_pos = Solid_Phase(model, parameters, optimizer)
 
-    for iter in range(10000):
+    print("Iter \t\t PDE \t BC Centre \t BC Surf \t IV")
+    for j in range(10000 + 1):
 
-        pinn_cp.train_step(optimizer)
-        print(iter)
+        losses = pinn_pos.train_step()
+
+        if j % 1000 == 0:
+            print(j, "\t\t", losses)

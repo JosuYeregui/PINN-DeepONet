@@ -7,8 +7,21 @@ import numpy as np
 
 class Solid_Phase(PINN):
 
-    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1.):
-        super().__init__(model, criterion)
+    def __init__(self, model, parameters, optimizer, criterion=nn.MSELoss(), r_scale=1., t_scale=1.):
+        super().__init__(model, optimizer, criterion)
+
+        # input_size = 2
+        # output_size = 1
+        # hidden_size = 32
+        # self.model = nn.Sequential(
+        #     nn.Linear(input_size, hidden_size),
+        #     nn.Tanh(),
+        #     nn.Linear(hidden_size, hidden_size),
+        #     nn.Tanh(),
+        #     nn.Linear(hidden_size, round(hidden_size / 2)),
+        #     nn.Tanh(),
+        #     nn.Linear(round(hidden_size / 2), output_size),
+        # )
 
         self.params = parameters
 
@@ -17,62 +30,63 @@ class Solid_Phase(PINN):
 
     def compute_loss(self):
 
-        loss = 0.
+        loss = []
 
         pde_sample = sample(50, 2)
-        c_pde = self.model(pde_sample)
+        c_pde = self(pde_sample)
 
-        loss += self.criterion(self._pde(pde_sample[:, 1], pde_sample[:, 0], c_pde))
+        loss.append(self.criterion(self._pde(pde_sample, c_pde), torch.zeros_like(c_pde)))
 
         iv_sample_r = sample(50, 1)
-        iv_sample = torch.concat([torch.zeros_like(iv_sample_r), iv_sample_r], dim=0)
-        c_iv = self.model(iv_sample)
+        iv_sample = torch.concat([torch.zeros_like(iv_sample_r), iv_sample_r], dim=1)
+        c_iv = self(iv_sample)
 
-        loss += self.criterion(self._iv(c_iv, self.params["SOC_0"]))
+        loss.append(self.criterion(self._iv(c_iv, self.params["SOC_0"]), torch.zeros_like(c_iv)))
 
         bcc_sample_t = sample(50, 1)
-        bcc_sample_r = torch.zeros_like(bcc_sample_t)
-        bcc_sample = torch.concat([bcc_sample_t, bcc_sample_r], dim=0)
-        c_bcc = self.model(bcc_sample)
+        bcc_sample_r = torch.zeros_like(bcc_sample_t, requires_grad=True)
+        bcc_sample = torch.concat([bcc_sample_t, bcc_sample_r], dim=1)
+        c_bcc = self(bcc_sample)
 
-        loss += self.criterion(self._bc_centre(bcc_sample_r, c_bcc))
+        loss.append(self.criterion(self._bc_centre(bcc_sample, c_bcc), torch.zeros_like(c_bcc)))
 
         bcs_sample_t = sample(50, 1)
-        bcs_sample_r = torch.ones_like(bcs_sample_t)
-        bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=0)
-        c_bcs = self.model(bcs_sample)
+        bcs_sample_r = torch.ones_like(bcs_sample_t, requires_grad=True)
+        bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=1)
+        c_bcs = self(bcs_sample)
 
-        loss += self.criterion(self._bc_surf(bcc_sample_r, c_bcs, self.I))
+        loss.append(self.criterion(self._bc_surf(bcs_sample, c_bcs, self.params["I_typ"]), torch.zeros_like(c_bcs)))
 
-        return loss
+        hist = np.array([l.detach().numpy() for l in loss])
 
-    def _pde(self, r, t, c):
+        loss = torch.sum(torch.stack(loss))
 
-        dcdt = torch.autograd.grad(c, t, grad_outputs=torch.ones_like(c),
+        return loss, hist
+
+    def _pde(self, x, c):
+
+        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
-        dcdr = torch.autograd.grad(c, r, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-        dr2Ndr = torch.autograd.grad(dcdr * torch.pow(r, 2), r, grad_outputs=torch.ones_like(dcdr),
+        dr2Ndr = torch.autograd.grad(dcdx[:, 1] * torch.pow(x[:, 1], 2), x, grad_outputs=torch.ones_like(dcdx[:, 1]),
                                      create_graph=True)[0]
 
-        return dcdt * torch.pow(r, 2) - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr
+        return dcdx[:, 0] * torch.pow(x[:, 1], 2) - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr[:, 1]
 
-    def _bc_centre(self, r, c):
+    def _bc_centre(self, x, c):
 
-        dcdr = torch.autograd.grad(c, r, grad_outputs=torch.ones_like(c),
+        dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
-        return dcdr
+        return dcdr[:, 1]
 
-    def _bc_surf(self, r, c, I):
+    def _bc_surf(self, x, c, I):
 
-        dcdr = torch.autograd.grad(c, r, grad_outputs=torch.ones_like(c),
+        dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
-        return dcdr - torch.pow(self.params["R_p"], 2) * I / (
-                3 * self.params["Positive electrode active material volume fraction"] *
-                self.params["D_p"] * self.params["L_p"] * self.params["F"] *
+        return dcdr[:, 1] - np.power(self.params["R_p"], 2) * I / (
+                3 * self.params["as_p"] * self.params["D_p"] * self.params["L_p"] * self.params["F"] *
                 self.params["A"] * self.params["c_p_max"])
 
     def _iv(self, c0, SOC):
