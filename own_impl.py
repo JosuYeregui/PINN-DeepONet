@@ -1,9 +1,11 @@
-from SPM import Solid_Phase
-from pinn import FFNN
+from scr.SPM import Solid_Phase
+from scr.pinn import FFNN
+
 import pybamm
 import torch
-from torch import nn
 import numpy as np
+
+import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
 
@@ -42,14 +44,21 @@ if __name__ == "__main__":
         "T": 298.15
     }
 
+    training_points = {"PDE": 100, "IV": 20, "BC_Center": 20, "BC_Surf": 20}
+    validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
+
     model = FFNN(2, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-    pinn_pos = Solid_Phase(model, parameters, optimizer)
+    PINN_pos = Solid_Phase(model, parameters)
 
-    print("Iter \t\t PDE \t BC Centre \t BC Surf \t IV")
+    print("Iter \t\t PDE \t BC Centre \t BC Surf \t IV \t\t\t PDE \t BC Centre \t BC Surf \t IV")
     for j in range(10000 + 1):
 
-        losses = pinn_pos.train_step()
+        loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
 
         if j % 1000 == 0:
-            print(j, "\t\t", losses)
+            print(j, "\t\t", losses_tr, "\t\t", losses_val)
+
+    # Plot
+
+

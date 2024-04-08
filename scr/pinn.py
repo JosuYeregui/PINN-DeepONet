@@ -6,14 +6,12 @@ import numpy as np
 
 class PINN(nn.Module):
 
-    def __init__(self, model, optimizer, criterion=nn.MSELoss()):
+    def __init__(self, model, criterion=nn.MSELoss()):
         super().__init__()
         self.model = model
         self.model.apply(self.init_weights)
 
         self.criterion = criterion
-
-        self.optimizer = optimizer
 
     def init_weights(self, m):
         if isinstance(m, nn.Linear):
@@ -35,21 +33,30 @@ class PINN(nn.Module):
     def compute_loss(self):
         raise NotImplementedError
 
-    def train_step(self):
+    def train_step(self, optimizer, train_points, val_points=None):
 
         self.model.train()
 
         # Zero your gradients for every batch!
-        self.optimizer.zero_grad()
+        optimizer.zero_grad()
 
         # Compute the loss and its gradients
-        loss, losses = self.compute_loss()
-        loss.backward()
+        loss_tr, losses_tr = self.compute_loss(train_points)
+        loss_tr.backward()
 
         # Adjust learning weights
-        self.optimizer.step()
+        optimizer.step()
 
-        return losses
+        if val_points is not None:
+            self.model.eval(val_points)
+            # Compute the loss and its gradients
+            loss_val, losses_val = self.compute_loss()
+            loss_val = loss_val.detach().numpy()
+        else:
+            loss_val = 0.
+            losses_val = []
+
+        return loss_tr.detach().numpy(), losses_tr, loss_val, losses_val
 
 
 class FFNN(nn.Module):

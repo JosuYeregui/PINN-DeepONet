@@ -7,50 +7,37 @@ import numpy as np
 
 class Solid_Phase(PINN):
 
-    def __init__(self, model, parameters, optimizer, criterion=nn.MSELoss(), r_scale=1., t_scale=1.):
-        super().__init__(model, optimizer, criterion)
-
-        # input_size = 2
-        # output_size = 1
-        # hidden_size = 32
-        # self.model = nn.Sequential(
-        #     nn.Linear(input_size, hidden_size),
-        #     nn.Tanh(),
-        #     nn.Linear(hidden_size, hidden_size),
-        #     nn.Tanh(),
-        #     nn.Linear(hidden_size, round(hidden_size / 2)),
-        #     nn.Tanh(),
-        #     nn.Linear(round(hidden_size / 2), output_size),
-        # )
+    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1.):
+        super().__init__(model, criterion)
 
         self.params = parameters
 
         self.r_scale = r_scale
         self.t_scale = t_scale
 
-    def compute_loss(self):
+    def compute_loss(self, points):
 
         loss = []
 
-        pde_sample = sample(50, 2)
+        pde_sample = sample(points["PDE"], 2)
         c_pde = self(pde_sample)
 
         loss.append(self.criterion(self._pde(pde_sample, c_pde), torch.zeros_like(c_pde)))
 
-        iv_sample_r = sample(50, 1)
+        iv_sample_r = sample(points["IV"], 1)
         iv_sample = torch.concat([torch.zeros_like(iv_sample_r), iv_sample_r], dim=1)
         c_iv = self(iv_sample)
 
         loss.append(self.criterion(self._iv(c_iv, self.params["SOC_0"]), torch.zeros_like(c_iv)))
 
-        bcc_sample_t = sample(50, 1)
+        bcc_sample_t = sample(points["BC_Center"], 1)
         bcc_sample_r = torch.zeros_like(bcc_sample_t, requires_grad=True)
         bcc_sample = torch.concat([bcc_sample_t, bcc_sample_r], dim=1)
         c_bcc = self(bcc_sample)
 
         loss.append(self.criterion(self._bc_centre(bcc_sample, c_bcc), torch.zeros_like(c_bcc)))
 
-        bcs_sample_t = sample(50, 1)
+        bcs_sample_t = sample(points["BC_Surf"], 1)
         bcs_sample_r = torch.ones_like(bcs_sample_t, requires_grad=True)
         bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=1)
         c_bcs = self(bcs_sample)
