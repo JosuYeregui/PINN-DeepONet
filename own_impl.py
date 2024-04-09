@@ -22,16 +22,19 @@ if __name__ == "__main__":
     training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
     validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
 
+    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1.}
+    neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 2.}
+
     model = FFNN(2, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    PINN_neg = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="neg")
+    PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(20000 + 1):
 
-        loss_tr, losses_tr, loss_val, losses_val = PINN_neg.train_step(optimizer, training_points, validation_points)
+        loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
 
         if j % 1000 == 0:
             print(j, "\t\t", losses_tr, "\t\t", losses_val)
@@ -41,9 +44,9 @@ if __name__ == "__main__":
             history["losses_val"].append(losses_val)
             history["iteration"].append(j)
 
-    # PINN_pos.save_model("/models/previous.pt")
+    # PINN_pos.save_model("models/positive.pt")
     #
-    # with open('models/previous.pkl', 'wb') as fp:
+    # with open('models/positive.pkl', 'wb') as fp:
     #     pickle.dump(history, fp)
 
     # Plot
@@ -75,8 +78,8 @@ if __name__ == "__main__":
     t = sol["Time [s]"].entries
     x = sol["x [m]"].entries[:, 0]
 
-    pos_SPM_r0 = c_s_n(r=r_n[0], t=t, x=x[0])
-    pos_SPM_r1 = c_s_n(r=r_n[-1], t=t, x=x[0])
+    pos_SPM_r0 = c_s_p(r=r_p[0], t=t, x=x[-1])
+    pos_SPM_r1 = c_s_p(r=r_p[-1], t=t, x=x[-1])
 
     t_end = t[-1]
 
@@ -85,7 +88,7 @@ if __name__ == "__main__":
     bcs_sample_t = torch.linspace(0., 1., 1000)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r]).t()
-    c_bcs = PINN_neg(bcs_sample)
+    c_bcs = PINN_pos(bcs_sample)
 
     plt.figure()
     plt.grid("on")
@@ -98,7 +101,7 @@ if __name__ == "__main__":
 
     bcs_sample_r = torch.zeros_like(bcs_sample_t)
     bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r]).t()
-    c_bcs_r0 = PINN_neg(bcs_sample_r0)
+    c_bcs_r0 = PINN_pos(bcs_sample_r0)
 
     plt.figure()
     plt.grid("on")

@@ -8,13 +8,18 @@ import numpy as np
 
 class Solid_Phase(PINN):
 
-    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1., electrode="pos"):
+    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1.,
+                 electrode="pos", weights=None):
         super().__init__(model, criterion)
 
         self.params = parameters
 
         self.r_scale = r_scale
         self.t_scale = t_scale
+
+        self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
+        if weights is not None:
+            self.weights = weights
 
         if electrode == "pos":
             self.electrode = -1.
@@ -32,27 +37,31 @@ class Solid_Phase(PINN):
         pde_sample = sample(points["PDE"], 2)
         c_pde = self(pde_sample)
 
-        loss.append((1/1e-4) * self.criterion(self._pde(pde_sample, c_pde), torch.zeros_like(c_pde)))
+        loss.append(self.weights["PDE"] * self.criterion(self._pde(pde_sample, c_pde),
+                                                         torch.zeros_like(c_pde)))
 
         iv_sample_r = sample(points["IV"], 1)
         iv_sample = torch.concat([torch.zeros_like(iv_sample_r), iv_sample_r], dim=1)
         c_iv = self(iv_sample)
 
-        loss.append(10. * self.criterion(self._iv(c_iv, self.params["SOC_0"]), torch.zeros_like(c_iv)))
+        loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
+                                                         torch.zeros_like(c_iv)))
 
         bcc_sample_t = sample(points["BC_Center"], 1)
         bcc_sample_r = torch.zeros_like(bcc_sample_t, requires_grad=True)
         bcc_sample = torch.concat([bcc_sample_t, bcc_sample_r], dim=1)
         c_bcc = self(bcc_sample)
 
-        loss.append(self.criterion(self._bc_centre(bcc_sample, c_bcc), torch.zeros_like(c_bcc)))
+        loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(bcc_sample, c_bcc),
+                                                               torch.zeros_like(c_bcc)))
 
         bcs_sample_t = sample(points["BC_Surf"], 1)
         bcs_sample_r = torch.ones_like(bcs_sample_t, requires_grad=True)
         bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=1)
         c_bcs = self(bcs_sample)
 
-        loss.append(2*self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.params["I_typ"]), torch.zeros_like(c_bcs)))
+        loss.append(self.weights["BC_Surf"] * self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.params["I_typ"]),
+                                                             torch.zeros_like(c_bcs)))
 
         hist = np.array([l.detach().numpy() for l in loss])
 
