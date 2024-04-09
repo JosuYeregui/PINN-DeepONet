@@ -24,14 +24,14 @@ if __name__ == "__main__":
 
     model = FFNN(2, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
-    PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss)
+    PINN_neg = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="neg")
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(20000 + 1):
 
-        loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
+        loss_tr, losses_tr, loss_val, losses_val = PINN_neg.train_step(optimizer, training_points, validation_points)
 
         if j % 1000 == 0:
             print(j, "\t\t", losses_tr, "\t\t", losses_val)
@@ -75,8 +75,8 @@ if __name__ == "__main__":
     t = sol["Time [s]"].entries
     x = sol["x [m]"].entries[:, 0]
 
-    pos_SPM_r0 = c_s_p(r=r_p[0], t=t, x=x[-1])
-    pos_SPM_r1 = c_s_p(r=r_p[-1], t=t, x=x[-1])
+    pos_SPM_r0 = c_s_n(r=r_n[0], t=t, x=x[0])
+    pos_SPM_r1 = c_s_n(r=r_n[-1], t=t, x=x[0])
 
     t_end = t[-1]
 
@@ -85,7 +85,7 @@ if __name__ == "__main__":
     bcs_sample_t = torch.linspace(0., 1., 1000)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r]).t()
-    c_bcs = PINN_pos(bcs_sample)
+    c_bcs = PINN_neg(bcs_sample)
 
     plt.figure()
     plt.grid("on")
@@ -98,7 +98,7 @@ if __name__ == "__main__":
 
     bcs_sample_r = torch.zeros_like(bcs_sample_t)
     bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r]).t()
-    c_bcs_r0 = PINN_pos(bcs_sample_r0)
+    c_bcs_r0 = PINN_neg(bcs_sample_r0)
 
     plt.figure()
     plt.grid("on")

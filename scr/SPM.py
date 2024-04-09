@@ -8,13 +8,22 @@ import numpy as np
 
 class Solid_Phase(PINN):
 
-    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1.):
+    def __init__(self, model, parameters, criterion=nn.MSELoss(), r_scale=1., t_scale=1., electrode="pos"):
         super().__init__(model, criterion)
 
         self.params = parameters
 
         self.r_scale = r_scale
         self.t_scale = t_scale
+
+        if electrode == "pos":
+            self.electrode = -1.
+            self.el_name = "p"
+        elif electrode == "neg":
+            self.electrode = 1.
+            self.el_name = "n"
+        else:
+            raise ValueError("Selected electrode type is not compatible")
 
     def compute_loss(self, points):
 
@@ -43,7 +52,7 @@ class Solid_Phase(PINN):
         bcs_sample = torch.concat([bcs_sample_t, bcs_sample_r], dim=1)
         c_bcs = self(bcs_sample)
 
-        loss.append(self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.params["I_typ"]), torch.zeros_like(c_bcs)))
+        loss.append(2*self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.params["I_typ"]), torch.zeros_like(c_bcs)))
 
         hist = np.array([l.detach().numpy() for l in loss])
 
@@ -56,10 +65,10 @@ class Solid_Phase(PINN):
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
-        dr2Ndr = torch.autograd.grad(dcdx[:, 1] * torch.pow(x[:, 1], 2), x, grad_outputs=torch.ones_like(dcdx[:, 1]),
+        dr2Ndr = - torch.autograd.grad(dcdx[:, 1] * torch.pow(x[:, 1], 2), x, grad_outputs=torch.ones_like(dcdx[:, 1]),
                                      create_graph=True)[0]
 
-        return dcdx[:, 0] * torch.pow(x[:, 1], 2) / 3600. - self.params["D_p"] / np.power(self.params["R_p"], 2) * dr2Ndr[:, 1]
+        return dcdx[:, 0] * torch.pow(x[:, 1], 2) / 3600. + self.params["D_"+self.el_name] / np.power(self.params["R_"+self.el_name], 2) * dr2Ndr[:, 1]
 
     def _bc_centre(self, x, c):
 
@@ -73,9 +82,9 @@ class Solid_Phase(PINN):
         dcdr = - torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
-        return dcdr[:, 1] - np.power(self.params["R_p"], 2) * I / (
-                3 * self.params["eps_p"] * self.params["D_p"] * self.params["L_p"] * self.params["F"] *
-                self.params["A"] * self.params["c_p_max"])
+        return - dcdr[:, 1] - self.electrode * np.power(self.params["R_"+self.el_name], 2) * I / (
+                3 * self.params["eps_"+self.el_name] * self.params["D_"+self.el_name] * self.params["L_"+self.el_name] * self.params["F"] *
+                self.params["A"] * self.params["c_"+self.el_name+"_max"])
 
     def _iv(self, c0, SOC):
-        return c0 - (self.params["SOL_pos"][0] + ((self.params["SOL_pos"][1] - self.params["SOL_pos"][0]) * SOC))
+        return c0 - (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] - self.params["SOL_"+self.el_name][0]) * SOC))
