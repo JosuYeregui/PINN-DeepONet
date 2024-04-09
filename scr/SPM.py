@@ -23,13 +23,13 @@ class Solid_Phase(PINN):
         pde_sample = sample(points["PDE"], 2)
         c_pde = self(pde_sample)
 
-        loss.append(self.criterion(self._pde(pde_sample, c_pde), torch.zeros_like(c_pde)))
+        loss.append((1/1e-4) * self.criterion(self._pde(pde_sample, c_pde), torch.zeros_like(c_pde)))
 
         iv_sample_r = sample(points["IV"], 1)
         iv_sample = torch.concat([torch.zeros_like(iv_sample_r), iv_sample_r], dim=1)
         c_iv = self(iv_sample)
 
-        loss.append(self.criterion(self._iv(c_iv, self.params["SOC_0"]), torch.zeros_like(c_iv)))
+        loss.append(10. * self.criterion(self._iv(c_iv, self.params["SOC_0"]), torch.zeros_like(c_iv)))
 
         bcc_sample_t = sample(points["BC_Center"], 1)
         bcc_sample_r = torch.zeros_like(bcc_sample_t, requires_grad=True)
@@ -70,7 +70,7 @@ class Solid_Phase(PINN):
 
     def _bc_surf(self, x, c, I):
 
-        dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
+        dcdr = - torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
         return dcdr[:, 1] - np.power(self.params["R_p"], 2) * I / (
@@ -78,5 +78,4 @@ class Solid_Phase(PINN):
                 self.params["A"] * self.params["c_p_max"])
 
     def _iv(self, c0, SOC):
-
         return c0 - (self.params["SOL_pos"][0] + ((self.params["SOL_pos"][1] - self.params["SOL_pos"][0]) * SOC))

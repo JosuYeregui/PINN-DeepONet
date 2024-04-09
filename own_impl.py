@@ -12,6 +12,9 @@ import matplotlib.pyplot as plt
 np.set_printoptions(precision=3)
 
 
+def RMSELoss(yhat, y):
+    return torch.sqrt(torch.mean((yhat-y)**2))
+
 if __name__ == "__main__":
 
     parameters = load_params()
@@ -20,8 +23,8 @@ if __name__ == "__main__":
     validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
 
     model = FFNN(2, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
-    PINN_pos = Solid_Phase(model, parameters)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss)
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
@@ -54,17 +57,30 @@ if __name__ == "__main__":
     plt.show()
 
     # Evaluation
-    param = pybamm.ParameterValues("ORegan2022")
+    # param = pybamm.ParameterValues("ORegan2022")
+    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
     I = -5
     experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
     sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
     sol = sim.solve(initial_soc=1)
 
-    pos_SPM = sol['X-averaged positive particle concentration'].entries[-1, :]
-    t_end = 3600.
+    # pos_SPM_r0 = sol['X-averaged positive particle concentration'].entries[0, :]
+    # pos_SPM_r1 = sol['X-averaged positive particle concentration'].entries[-1, :]
 
-    t = np.linspace(0, t_end, num=len(pos_SPM))/3600.
+    c_s_n = sol["Negative particle concentration"]
+    c_s_p = sol["Positive particle concentration"]
+    r_n = sol["r_n [m]"].entries[:, 0, 0]
+    r_p = sol["r_p [m]"].entries[:, 0, 0]
+    t = sol["Time [s]"].entries
+    x = sol["x [m]"].entries[:, 0]
+
+    pos_SPM_r0 = c_s_p(r=r_p[0], t=t, x=x[-1])
+    pos_SPM_r1 = c_s_p(r=r_p[-1], t=t, x=x[-1])
+
+    t_end = t[-1]
+
+    t = np.linspace(0, t_end, num=len(pos_SPM_r1))/3600.
 
     bcs_sample_t = torch.linspace(0., 1., 1000)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
@@ -74,7 +90,20 @@ if __name__ == "__main__":
     plt.figure()
     plt.grid("on")
     plt.plot(bcs_sample_t.detach().numpy(), c_bcs.detach().numpy(), "k", label="PINN")
-    plt.plot(t, pos_SPM, "r", label="Pybamm")
+    plt.plot(t, pos_SPM_r1, "r", label="Pybamm")
+    plt.legend()
+    plt.xlabel("t [h]")
+    plt.ylabel("x [-]")
+    plt.show()
+
+    bcs_sample_r = torch.zeros_like(bcs_sample_t)
+    bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r]).t()
+    c_bcs_r0 = PINN_pos(bcs_sample_r0)
+
+    plt.figure()
+    plt.grid("on")
+    plt.plot(bcs_sample_t.detach().numpy(), c_bcs_r0.detach().numpy(), "k", label="PINN")
+    plt.plot(t, pos_SPM_r0, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("t [h]")
     plt.ylabel("x [-]")

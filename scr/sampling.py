@@ -3,6 +3,13 @@ import skopt
 import torch
 
 
+class Sampler:
+
+    def __init__(self):
+
+        self.points = None
+
+
 def sample(n, n_dim, scale=1., mode="pseudo"):
 
     if mode == "pseudo":
