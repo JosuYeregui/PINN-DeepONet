@@ -26,7 +26,7 @@ class PINN(nn.Module):
         torch.save(self.model, PATH)
 
     def load_model(self, PATH):
-        self.model = torch.load(torch.load(PATH))
+        self.model = torch.load(PATH)
         self.model.eval()
 
     def compute_loss(self, points):

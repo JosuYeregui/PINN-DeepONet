@@ -69,6 +69,25 @@ class Solid_Phase(PINN):
 
         return loss, hist
 
+    def compute_residuals(self, samples):
+
+        self.model.eval()
+        #
+        c_pde = self(samples)
+        residuals = self._pde(samples, c_pde)
+
+        return residuals
+
+    def compute_gradients(self, samples):
+
+        self.model.eval()
+        #
+        c = self(samples)
+        dcdx = torch.autograd.grad(c, samples, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
+
+        return dcdx
+
     def _pde(self, x, c):
 
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
