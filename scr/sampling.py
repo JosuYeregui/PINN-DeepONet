@@ -24,6 +24,7 @@ class Sampler:
             else:
                 raise NotImplementedError("The sampling type does not exist")
 
+            points = torch.concat([points, torch.ones((points.size()[0], 1))], dim=1)
             self.points[cond] = points
 
     def update_iv(self, n):

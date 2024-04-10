@@ -35,7 +35,10 @@ if __name__ == "__main__":
     pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1.}
     neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 2.}
 
-    model = FFNN(2, 1)
+    C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
+    C_rates_val = [0.4, 0.8]
+
+    model = FFNN(3, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
 
@@ -47,7 +50,10 @@ if __name__ == "__main__":
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(20000 + 1):
 
+        PINN_pos.update_crate(np.random.choice(C_rates_tr))
         loss_tr, losses_tr = PINN_pos.train_step(optimizer, Sampler_tr)
+
+        PINN_pos.update_crate(np.random.choice(C_rates_val))
         loss_val, losses_val = PINN_pos.evaluate(Sampler_val)
 
         if j % 1000 == 0:
@@ -58,25 +64,28 @@ if __name__ == "__main__":
             history["losses_val"].append(losses_val)
             history["iteration"].append(j)
 
-    j_prev = j
-    optimizer = torch.optim.LBFGS(model.parameters(), lr=0.01, max_iter=50)
+    # j_prev = j
+    # optimizer = torch.optim.LBFGS(model.parameters(), lr=0.01, max_iter=50)
+    #
+    # for j in range(j_prev, j_prev + 200 + 1):
+    #
+    #     PINN_pos.update_crate(np.random.choice(C_rates_tr))
+    #     loss_tr, losses_tr = PINN_pos.train_step(optimizer, Sampler_tr)
+    #
+    #     PINN_pos.update_crate(np.random.choice(C_rates_val))
+    #     loss_val, losses_val = PINN_pos.evaluate(Sampler_val)
+    #
+    #     if j % 10 == 0:
+    #         print(j, "\t\t", losses_tr, "\t\t", losses_val)
+    #         history["loss_tr"].append(loss_tr)
+    #         history["losses_tr"].append(losses_tr)
+    #         history["loss_val"].append(loss_val)
+    #         history["losses_val"].append(losses_val)
+    #         history["iteration"].append(j)
 
-    for j in range(j_prev, j_prev + 200 + 1):
+    # PINN_pos.save_model("models/positive_current.pt")
 
-        loss_tr, losses_tr = PINN_pos.train_step(optimizer, Sampler_tr)
-        loss_val, losses_val = PINN_pos.evaluate(Sampler_val)
-
-        if j % 10 == 0:
-            print(j, "\t\t", losses_tr, "\t\t", losses_val)
-            history["loss_tr"].append(loss_tr)
-            history["losses_tr"].append(losses_tr)
-            history["loss_val"].append(loss_val)
-            history["losses_val"].append(losses_val)
-            history["iteration"].append(j)
-
-    # PINN_pos.save_model("models/positive_imp.pt")
-
-    # with open('models/positive_imp.pkl', 'wb') as fp:
+    # with open('models/positive_current.pkl', 'wb') as fp:
     #     pickle.dump(history, fp)
 
     # Plot
@@ -114,14 +123,17 @@ if __name__ == "__main__":
 
     t = np.linspace(0, t_end, num=len(pos_SPM_r1))/3600.
 
+    PINN_pos.update_crate(0.9)
+
     bcs_sample_t = torch.linspace(0., 1., 1000)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
-    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r]).t()
+    bcs_sample_I = torch.ones_like(bcs_sample_t) * 0.9
+    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
     c_bcs = PINN_pos(bcs_sample)
 
     plt.figure()
     plt.grid("on")
-    plt.plot(bcs_sample_t.detach().numpy(), c_bcs.detach().numpy(), "k", label="PINN")
+    plt.plot(bcs_sample_t.detach().numpy()*PINN_pos.tc/3600., c_bcs.detach().numpy(), "k", label="PINN")
     plt.plot(t, pos_SPM_r1, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("t [h]")
@@ -129,12 +141,12 @@ if __name__ == "__main__":
     plt.show()
 
     bcs_sample_r = torch.zeros_like(bcs_sample_t)
-    bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r]).t()
+    bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
     c_bcs_r0 = PINN_pos(bcs_sample_r0)
 
     plt.figure()
     plt.grid("on")
-    plt.plot(bcs_sample_t.detach().numpy(), c_bcs_r0.detach().numpy(), "k", label="PINN")
+    plt.plot(bcs_sample_t.detach().numpy()*PINN_pos.tc/3600., c_bcs_r0.detach().numpy(), "k", label="PINN")
     plt.plot(t, pos_SPM_r0, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("t [h]")
