@@ -32,14 +32,14 @@ if __name__ == "__main__":
                          "BC_Center": {"type": "BC", "N": 10, "BC_pos": 0.},
                          "BC_Surf": {"type": "BC", "N": 10, "BC_pos": 1.}}
 
-    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1.}
+    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 10.}
     neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 2.}
 
     C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
     C_rates_val = [0.4, 0.8]
 
     model = FFNN(3, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
 
     Sampler_tr = Sampler(training_points)
@@ -102,7 +102,7 @@ if __name__ == "__main__":
     # param = pybamm.ParameterValues("ORegan2022")
     param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
-    experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
+    experiment = pybamm.Experiment(["Discharge at 0.9C for 10000 seconds or until 2.5 V"])
     sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
     sol = sim.solve(initial_soc=1)
 

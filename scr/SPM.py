@@ -37,25 +37,25 @@ class Solid_Phase(PINN):
 
         loss = []
 
-        pde_sample = sampler.points["PDE"]
+        pde_sample = sampler.points["PDE"] * torch.Tensor([1., 1., self.C_rate])
         c_pde = self(pde_sample)
 
         loss.append(self.weights["PDE"] * self.criterion(self._pde(pde_sample, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        iv_sample = sampler.points["IV"]
+        iv_sample = sampler.points["IV"] * torch.Tensor([1., 1., self.C_rate])
         c_iv = self(iv_sample)
 
         loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
                                                         torch.zeros_like(c_iv)))
 
-        bcc_sample = sampler.points["BC_Center"]
+        bcc_sample = sampler.points["BC_Center"] * torch.Tensor([1., 1., self.C_rate])
         c_bcc = self(bcc_sample)
 
         loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(bcc_sample, c_bcc),
                                                                torch.zeros_like(c_bcc)))
 
-        bcs_sample = sampler.points["BC_Surf"]
+        bcs_sample = sampler.points["BC_Surf"] * torch.Tensor([1., 1., self.C_rate])
         c_bcs = self(bcs_sample)
 
         loss.append(self.weights["BC_Surf"] *
@@ -111,8 +111,7 @@ class Solid_Phase(PINN):
                                      create_graph=True)[0]
 
         def regularization(t):
-            return 1.
-            # return 0.5 * (1 + torch.tanh((t - 10. / 3600.) / (10. / 3600.)))
+            return 0.5 * (1 + torch.tanh((t - self.tc*0.01/self.tc) / (self.tc*0.01/self.tc)))
 
         return (- dcdr[:, 1] - regularization(x[:, 0]) * self.electrode * np.power(self.params["R_"+self.el_name], 2) *
                 i_app / (3 * self.params["eps_"+self.el_name] * self.params["D_"+self.el_name] *
