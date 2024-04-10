@@ -32,30 +32,45 @@ class PINN(nn.Module):
     def compute_loss(self, points):
         raise NotImplementedError
 
-    def train_step(self, optimizer, train_points, val_points=None):
+    def train_step(self, optimizer, sampler):
 
         self.model.train()
 
-        # Zero your gradients for every batch!
-        optimizer.zero_grad()
+        def get_loss():
 
-        # Compute the loss and its gradients
-        loss_tr, losses_tr = self.compute_loss(train_points)
-        loss_tr.backward()
+            # Zero your gradients for every batch!
+            optimizer.zero_grad()
+
+            # Compute the loss and its gradients
+            loss, losses = self.compute_loss(sampler)
+            loss.backward()
+            return loss, losses
+
+        def closure():
+            loss, _ = get_loss()
+            return loss
 
         # Adjust learning weights
-        optimizer.step()
-
-        if val_points is not None:
+        if isinstance(optimizer, torch.optim.LBFGS):
+            optimizer.step(closure)
             self.model.eval()
-            # Compute the loss and its gradients
-            loss_val, losses_val = self.compute_loss(val_points)
-            loss_val = loss_val.detach().numpy()
+            loss_tr, losses_tr = get_loss()
         else:
-            loss_val = 0.
-            losses_val = []
+            loss_tr, losses_tr = get_loss()
+            optimizer.step()
 
-        return loss_tr.detach().numpy(), losses_tr, loss_val, losses_val
+        loss_tr = loss_tr.detach().numpy()
+
+        return loss_tr, losses_tr
+
+    def evaluate(self, sampler):
+
+        self.model.eval()
+        # Compute the loss and its gradients
+        loss_val, losses_val = self.compute_loss(sampler)
+        loss_val = loss_val.detach().numpy()
+
+        return loss_val, losses_val
 
 
 class FFNN(nn.Module):

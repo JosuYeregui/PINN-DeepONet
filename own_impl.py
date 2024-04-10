@@ -1,5 +1,6 @@
 from scr.SPM import Solid_Phase
 from scr.pinn import FFNN
+from scr.sampling import Sampler
 from scr.utils import load_params
 
 import pybamm
@@ -20,8 +21,16 @@ if __name__ == "__main__":
 
     parameters = load_params()
 
-    training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
-    validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
+    # training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
+    training_points = {"PDE": {"type": "PDE", "N": 1000},
+                       "IV": {"type": "IV", "N": 50},
+                       "BC_Center": {"type": "BC", "N": 50, "BC_pos": 0.},
+                       "BC_Surf": {"type": "BC", "N": 50, "BC_pos": 1.}}
+    # validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
+    validation_points = {"PDE": {"type": "PDE", "N": 20},
+                         "IV": {"type": "IV", "N": 10},
+                         "BC_Center": {"type": "BC", "N": 10, "BC_pos": 0.},
+                         "BC_Surf": {"type": "BC", "N": 10, "BC_pos": 1.}}
 
     pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1.}
     neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 2.}
@@ -30,12 +39,16 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN_pos = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
 
+    Sampler_tr = Sampler(training_points)
+    Sampler_val = Sampler(validation_points)
+
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(20000 + 1):
 
-        loss_tr, losses_tr, loss_val, losses_val = PINN_pos.train_step(optimizer, training_points, validation_points)
+        loss_tr, losses_tr = PINN_pos.train_step(optimizer, Sampler_tr)
+        loss_val, losses_val = PINN_pos.evaluate(Sampler_val)
 
         if j % 1000 == 0:
             print(j, "\t\t", losses_tr, "\t\t", losses_val)
@@ -45,9 +58,25 @@ if __name__ == "__main__":
             history["losses_val"].append(losses_val)
             history["iteration"].append(j)
 
-    # PINN_pos.save_model("models/positive.pt")
-    #
-    # with open('models/positive.pkl', 'wb') as fp:
+    j_prev = j
+    optimizer = torch.optim.LBFGS(model.parameters(), lr=0.01, max_iter=50)
+
+    for j in range(j_prev, j_prev + 200 + 1):
+
+        loss_tr, losses_tr = PINN_pos.train_step(optimizer, Sampler_tr)
+        loss_val, losses_val = PINN_pos.evaluate(Sampler_val)
+
+        if j % 10 == 0:
+            print(j, "\t\t", losses_tr, "\t\t", losses_val)
+            history["loss_tr"].append(loss_tr)
+            history["losses_tr"].append(losses_tr)
+            history["loss_val"].append(loss_val)
+            history["losses_val"].append(losses_val)
+            history["iteration"].append(j)
+
+    # PINN_pos.save_model("models/positive_imp.pt")
+
+    # with open('models/positive_imp.pkl', 'wb') as fp:
     #     pickle.dump(history, fp)
 
     # Plot
@@ -64,7 +93,6 @@ if __name__ == "__main__":
     # param = pybamm.ParameterValues("ORegan2022")
     param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
-    I = -5
     experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
     sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
     sol = sim.solve(initial_soc=1)
