@@ -3,7 +3,6 @@ import pybamm
 
 def load_params():
     param = pybamm.ParameterValues("Chen2020")
-    PBM_model = pybamm.lithium_ion.SPM()
 
     parameters = {
         "E_p": lambda sto: -0.8090 * sto + 4.4875 - 0.0428 * torch.tanh(18.5138 * (sto - 0.5542)) -
@@ -27,9 +26,12 @@ def load_params():
         "alpha_n": param["Negative electrode charge transfer coefficient"],
         "c_p_max": param["Maximum concentration in positive electrode [mol.m-3]"],
         "c_n_max": param["Maximum concentration in negative electrode [mol.m-3]"],
+        "ce0": param["Initial concentration in electrolyte [mol.m-3]"],
         "D_p": param["Positive electrode diffusivity [m2.s-1]"],
         "D_n": param["Negative electrode diffusivity [m2.s-1]"],
-        "SOL_n": [0.002, 0.8619],
+        "D_e": lambda c: 8.794e-11 * torch.pow(c, 2) - 3.972e-10 * torch.pow(c, 2) + 4.862e-10,
+        "sigma_e": lambda c: 0.1297 * torch.pow(c, 3) - 2.51 * torch.pow(c, 1.5) + 3.329 * c,
+        "SOL_n": [0.0263473, 0.91061212],
         "SOL_p": [0.9332, 0.252],
         "F": 96485.33212,
         "R": 8.314462,
