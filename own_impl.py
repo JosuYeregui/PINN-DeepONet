@@ -83,10 +83,10 @@ if __name__ == "__main__":
     #         history["losses_val"].append(losses_val)
     #         history["iteration"].append(j)
 
-    # PINN_pos.save_model("models/positive_current.pt")
+    PINN_pos.save_model("models/positive_current.pt")
 
-    # with open('models/positive_current.pkl', 'wb') as fp:
-    #     pickle.dump(history, fp)
+    with open('models/positive_current.pkl', 'wb') as fp:
+        pickle.dump(history, fp)
 
     # Plot
     plt.figure()
