@@ -32,7 +32,7 @@ if __name__ == "__main__":
                          "BC_Left": {"type": "BC", "N": 10, "BC_pos": 0.},
                          "BC_Right": {"type": "BC", "N": 10, "BC_pos": 1.}}
 
-    weights = {"PDE": 1., "IV": 10., "BC_Left": 10., "BC_Right": 10.}
+    weights = {"PDE": 1., "IV": 1., "BC_Left": 1000., "BC_Right": 1000.}
 
     C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
     C_rates_val = [0.4, 0.8]
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     C_rates_val = [1.]
 
     model = FFNN(3, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN_elec = Electrolyte(model, parameters, criterion=RMSELoss, weights=weights)
 
     Sampler_tr = Sampler(training_points)
@@ -50,7 +50,7 @@ if __name__ == "__main__":
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Left \t BC Right \t\t\t PDE \t IV \t BC Left \t BC Right")
-    for j in range(5000 + 1):
+    for j in range(3000 + 1):
 
         PINN_elec.update_crate(np.random.choice(C_rates_tr))
         loss_tr, losses_tr = PINN_elec.train_step(optimizer, Sampler_tr)
@@ -66,9 +66,9 @@ if __name__ == "__main__":
             history["losses_val"].append(losses_val)
             history["iteration"].append(j)
 
-    # PINN_neg.save_model("models/negative_current.pt")
+    # PINN_neg.save_model("models/electrolyte.pt")
     #
-    # with open('models/negative_current.pkl', 'wb') as fp:
+    # with open('models/electrolyte.pkl', 'wb') as fp:
     #     pickle.dump(history, fp)
 
     # Plot
@@ -77,7 +77,7 @@ if __name__ == "__main__":
     plt.semilogy(history["iteration"], history["loss_tr"], label="Training")
     plt.semilogy(history["iteration"], history["loss_val"], label="Validation")
     plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
+    plt.ylabel("RMSE Loss")
     plt.legend()
     plt.show()
 
@@ -108,7 +108,7 @@ if __name__ == "__main__":
 
     bcs_sample_x = torch.linspace(0., 1., 1000)
     bcs_sample_t = torch.zeros_like(bcs_sample_x)
-    bcs_sample_I = torch.ones_like(bcs_sample_t) * 0.9
+    bcs_sample_I = torch.ones_like(bcs_sample_t) * 1.
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_x, bcs_sample_I]).t()
     ce_PINN_t0 = PINN_elec(bcs_sample)
 

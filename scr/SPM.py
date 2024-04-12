@@ -204,20 +204,20 @@ class Electrolyte(PINN):
         N = self._compute_flux(x, c, i_app)
 
         dNdx = torch.autograd.grad(N, x, grad_outputs=torch.ones_like(N),
-                                     create_graph=True)[0]
+                                   create_graph=True)[0]
 
         L_n = self.params["L_n"] / self.params["L"]
         L_p = self.params["L_p"] / self.params["L"]
         L_s = self.params["L_s"] / self.params["L"]
 
-        left = dcdx[:, 0] * self.params["ce0"] / self.tc
+        left = dcdx[:, 0] * self.params["ce0"] / self.tc  # * self.params["por_n"]
         left[x[:, 1] < L_n] *= self.params["por_n"]
         left[(L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)] *= self.params["por_s"]
         left[x[:, 1] > L_n + L_s] *= self.params["por_p"]
 
         right = -dNdx[:, 1] / self.params["L"]
         right[x[:, 1] < L_n] += i_app / (self.params["F"] * self.params["L_n"])
-        right[x[:, 1] > L_n + L_s] += - i_app / (self.params["F"] * self.params["L_p"])
+        right[x[:, 1] > L_n + L_s] -= i_app / (self.params["F"] * self.params["L_p"])
 
         return left - right
 
@@ -237,14 +237,14 @@ class Electrolyte(PINN):
         L_p = self.params["L_p"] / self.params["L"]
         L_s = self.params["L_s"] / self.params["L"]
 
-        term_1 = - dcdx[:, 1] * self.params["D_e"](c) * self.params["ce0"] / self.params["L"]
+        term_1 = - dcdx[:, 1] * self.params["D_e"](c) * self.params["ce0"] / self.params["L"]  # * self.params["por_n"]
         term_1[x[:, 1] < L_n] *= self.params["por_n"]
         term_1[(L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)] *= self.params["por_s"]
         term_1[x[:, 1] > L_n + L_s] *= self.params["por_p"]
 
         term_2 = (self.params["t_plus"] * i_app / self.params["F"]
-                  * torch.ones_like(term_1))  # * self.params["R"] * self.params["T"]
+                  * torch.ones_like(term_1))
         term_2[x[:, 1] < L_n] *= x[x[:, 1] < L_n, 1] / L_n
         term_2[x[:, 1] > L_n + L_s] *= (1 - x[x[:, 1] > L_n + L_s, 1]) / L_p
 
-        return (term_1 + term_2)
+        return term_1 + term_2
