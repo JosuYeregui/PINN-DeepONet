@@ -74,18 +74,21 @@ class PINN(nn.Module):
 
 
 class FFNN(nn.Module):
-    def __init__(self,input_size,output_size):
+    def __init__(self,input_size, output_size, hidden=32):
         super(FFNN, self).__init__()
         self.tanh = nn.Tanh()
-        self.l1 = nn.Linear(input_size, 32)
-        self.l2 = nn.Linear(32, 32)
-        self.l3 = nn.Linear(32, 32)
-        self.l4 = nn.Linear(32, output_size)
+        self.l1 = nn.Linear(input_size, hidden)
+        self.l2 = nn.Linear(hidden, hidden)
+        self.l3 = nn.Linear(hidden, hidden)
+        # self.l4 = nn.Linear(hidden, hidden)
+        # self.l5 = nn.Linear(hidden, hidden)
+        # self.l6 = nn.Linear(hidden, hidden)
+        self.lout = nn.Linear(hidden, output_size)
 
     def forward(self, x):
         output = self.tanh(self.l1(x))
         output = self.tanh(self.l2(output))
         output = self.tanh(self.l3(output))
-        output = self.l4(output)
+        output = self.lout(output)
         return output
 

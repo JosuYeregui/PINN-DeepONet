@@ -1,4 +1,4 @@
-from scr.SPM import Solid_Phase, Electrolyte
+from scr.SPMe import Solid_Phase, Electrolyte
 from scr.pinn import FFNN
 from scr.sampling import Sampler
 from scr.utils import load_params
@@ -32,10 +32,10 @@ if __name__ == "__main__":
                          "BC_Left": {"type": "BC", "N": 10, "BC_pos": 0.},
                          "BC_Right": {"type": "BC", "N": 10, "BC_pos": 1.}}
 
-    weights = {"PDE": 1., "IV": 1., "BC_Left": 1000., "BC_Right": 1000.}
+    weights = {"PDE": 100., "IV": 1., "BC_Left": 10., "BC_Right": 1.}
 
-    C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
-    C_rates_val = [0.4, 0.8]
+    # C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
+    # C_rates_val = [0.4, 0.8]
 
     C_rates_tr = [1.]
     C_rates_val = [1.]
@@ -126,3 +126,40 @@ if __name__ == "__main__":
     plt.xlabel("r [-]")
     plt.ylabel("x [-]")
     plt.show()
+
+
+
+    num = 1000.
+
+    t_test = (torch.arange(0, num, dtype=torch.float, requires_grad=True) / num)[::10]
+    r_rand = (torch.arange(0, num, dtype=torch.float, requires_grad=True) / num)[::10]
+
+    t_new, r_new = torch.meshgrid(t_test, r_rand)
+    pos = np.zeros_like(t_new.detach().numpy())
+
+    pos_dcdt = np.zeros_like(t_new.detach().numpy())
+    pos_dcdr = np.zeros_like(t_new.detach().numpy())
+
+    for i, (t, r) in enumerate(zip(t_new, r_new)):
+        cur = torch.ones_like(t)
+        residuals = PINN_elec.compute_residuals(torch.stack((t, r, cur)).t(), cur[0])
+        pos[i, :] = np.abs(residuals.detach().numpy())
+        gradients = PINN_elec.compute_gradients(torch.stack((t, r, cur)).t())
+        pos_dcdt[i, :] = np.abs(gradients[:, 0].detach().numpy())
+        pos_dcdr[i, :] = np.abs(gradients[:, 1].detach().numpy())
+
+    def plot_area(points, style, cmap_label):
+        plt.subplots(figsize=(7, 3), tight_layout=True)
+        plot = plt.pcolormesh(t_new.detach().numpy(), r_new.detach().numpy(), points, cmap=style, shading='gouraud')
+        cbar = plt.colorbar(plot)
+        plt.contour(t_new.detach().numpy(), r_new.detach().numpy(), points, 10, colors='gray')
+        plt.ylabel('$x$')
+        plt.xlabel('$t$ [h]')
+        cbar.set_label(cmap_label)
+        # plt.savefig('/content/drive/MyDrive/Datos/con_PINN_pos.png')
+        plt.show()
+
+
+    plot_area(pos, 'RdBu_r', 'res')
+    plot_area(pos_dcdt, 'Oranges', 'dcdt')
+    plot_area(pos_dcdr, 'Oranges', 'dcdr')

@@ -38,6 +38,7 @@ def load_params():
         "D_n": param["Negative electrode diffusivity [m2.s-1]"],
         "D_e": lambda c: 8.794e-11 * torch.pow(c, 2) - 3.972e-10 * torch.pow(c, 2) + 4.862e-10,
         "sigma_e": lambda c: 0.1297 * torch.pow(c, 3) - 2.51 * torch.pow(c, 1.5) + 3.329 * c,
+        "brug": 1.5,
         "SOL_n": [0.0263473, 0.91061212],
         "SOL_p": [0.9332, 0.252],
         "F": 96485.33212,

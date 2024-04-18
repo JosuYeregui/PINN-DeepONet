@@ -1,4 +1,4 @@
-from scr.SPM import Solid_Phase
+from scr.SPMe import Solid_Phase
 from scr.pinn import FFNN
 from scr.utils import load_params
 

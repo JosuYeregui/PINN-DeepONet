@@ -145,7 +145,7 @@ class Electrolyte(PINN):
 
         loss = []
 
-        i_app = - self.C_rate * self.params["I_typ"] / self.params["A"]
+        i_app = self.C_rate * self.params["I_typ"] / self.params["A"]
 
         pde_sample = sampler.points["PDE"] * torch.Tensor([1., 1., self.C_rate])
         c_pde = self(pde_sample)
@@ -177,12 +177,12 @@ class Electrolyte(PINN):
 
         return loss, hist
 
-    def compute_residuals(self, samples):
+    def compute_residuals(self, samples, i_app):
 
         self.model.eval()
         #
         c_pde = self(samples)
-        residuals = self._pde(samples, c_pde)
+        residuals = self._pde(samples, c_pde, i_app)
 
         return residuals
 
@@ -196,8 +196,7 @@ class Electrolyte(PINN):
 
         return dcdx
 
-    def _pde(self, x, c, i_app):
-
+    def _pde_old(self, x, c, i_app):
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
@@ -207,23 +206,57 @@ class Electrolyte(PINN):
                                    create_graph=True)[0]
 
         L_n = self.params["L_n"] / self.params["L"]
-        L_p = self.params["L_p"] / self.params["L"]
         L_s = self.params["L_s"] / self.params["L"]
 
+        idx_Ln = x[:, 1] < L_n
+        idx_Lp = x[:, 1] > L_n + L_s
+        idx_Ls = (L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)
+
         left = dcdx[:, 0] * self.params["ce0"] / self.tc  # * self.params["por_n"]
-        left[x[:, 1] < L_n] *= self.params["por_n"]
-        left[(L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)] *= self.params["por_s"]
-        left[x[:, 1] > L_n + L_s] *= self.params["por_p"]
+        left[idx_Ln] *= self.params["por_n"]
+        left[idx_Ls] *= self.params["por_s"]
+        left[idx_Lp] *= self.params["por_p"]
 
         right = -dNdx[:, 1] / self.params["L"]
-        right[x[:, 1] < L_n] += i_app / (self.params["F"] * self.params["L_n"])
-        right[x[:, 1] > L_n + L_s] -= i_app / (self.params["F"] * self.params["L_p"])
+        right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"])
+        right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"])
+
+        return left - right
+
+    def _pde(self, x, c, i_app):
+
+        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
+
+        L_n = self.params["L_n"] / self.params["L"]
+        L_s = self.params["L_s"] / self.params["L"]
+
+        idx_Ln = x[:, 1] < L_n
+        idx_Lp = x[:, 1] > L_n + L_s
+        idx_Ls = (L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)
+
+        left = dcdx[:, 0] * self.params["ce0"] / self.tc  # * self.params["por_n"]
+        left[idx_Ln] *= self.params["por_n"]
+        left[idx_Ls] *= self.params["por_s"]
+        left[idx_Lp] *= self.params["por_p"]
+
+        dNdx = dcdx[:, 1] * self.params["D_e"](c) * self.params["ce0"] / self.params["L"]
+        dNdx[idx_Ln] *= self.params["por_n"] ** self.params["brug"]
+        dNdx[idx_Ls] *= self.params["por_s"] ** self.params["brug"]
+        dNdx[idx_Lp] *= self.params["por_p"] ** self.params["brug"]
+        right = torch.autograd.grad(dNdx, x, grad_outputs=torch.ones_like(dNdx),
+                                    create_graph=True)[0][:, 1] / self.params["L"]
+        right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
+        right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
 
         return left - right
 
     def _bc(self, x, c, i_app):
 
-        return self._compute_flux(x, c, i_app)
+        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
+        return dcdx[:, 1]
+        # return self._compute_flux(x, c, i_app)
 
     def _iv(self, c0):
         return c0 - 1.
@@ -237,14 +270,18 @@ class Electrolyte(PINN):
         L_p = self.params["L_p"] / self.params["L"]
         L_s = self.params["L_s"] / self.params["L"]
 
+        idx_Ln = x[:, 1] < L_n
+        idx_Lp = x[:, 1] > L_n + L_s
+        idx_Ls = (L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)
+
         term_1 = - dcdx[:, 1] * self.params["D_e"](c) * self.params["ce0"] / self.params["L"]  # * self.params["por_n"]
-        term_1[x[:, 1] < L_n] *= self.params["por_n"]
-        term_1[(L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)] *= self.params["por_s"]
-        term_1[x[:, 1] > L_n + L_s] *= self.params["por_p"]
+        term_1[idx_Ln] *= self.params["por_n"]
+        term_1[idx_Ls] *= self.params["por_s"]
+        term_1[idx_Lp] *= self.params["por_p"]
 
         term_2 = (self.params["t_plus"] * i_app / self.params["F"]
                   * torch.ones_like(term_1))
-        term_2[x[:, 1] < L_n] *= x[x[:, 1] < L_n, 1] / L_n
-        term_2[x[:, 1] > L_n + L_s] *= (1 - x[x[:, 1] > L_n + L_s, 1]) / L_p
+        term_2[idx_Ln] *= x[idx_Ln, 1] / L_n
+        term_2[idx_Lp] *= (1 - x[idx_Lp, 1]) / L_p
 
         return term_1 + term_2
