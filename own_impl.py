@@ -1,6 +1,6 @@
 from scr.SPMe import Solid_Phase
-from scr.pinn import FFNN
-from scr.sampling import Sampler
+from scr.pinn import FFNN, FFNN_old, DeepONet
+from scr.sampling import Sampler, Sampler_DONet
 from scr.utils import load_params
 
 import pybamm
@@ -23,9 +23,9 @@ if __name__ == "__main__":
 
     # training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
     training_points = {"PDE": {"type": "PDE", "N": 1000},
-                       "IV": {"type": "IV", "N": 50},
-                       "BC_Center": {"type": "BC", "N": 50, "BC_pos": 0.},
-                       "BC_Surf": {"type": "BC", "N": 50, "BC_pos": 1.}}
+                       "IV": {"type": "IV", "N": 100},
+                       "BC_Center": {"type": "BC", "N": 100, "BC_pos": 0.},
+                       "BC_Surf": {"type": "BC", "N": 100, "BC_pos": 1.}}
     # validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
     validation_points = {"PDE": {"type": "PDE", "N": 20},
                          "IV": {"type": "IV", "N": 10},
@@ -38,12 +38,17 @@ if __name__ == "__main__":
     C_rates_tr = [0.3, 0.5, 0.6, 0.7, 1.]
     C_rates_val = [0.4, 0.8]
 
-    model = FFNN(3, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    # model = FFNN(layers=[32, 32, 32], input_dim=3, output_dim=1, dropout=0.)
+    model = DeepONet(branch_layers=[32, 32, 32], trunk_layers=[32, 32, 32], dim_branch=3600, dim_trunk=3,
+                     dim_int=100, dim_out=1, dropout=0.)
+    # model = FFNN_old(3, 1)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN_neg = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="neg", weights=neg_weights)
 
-    Sampler_tr = Sampler(training_points)
-    Sampler_val = Sampler(validation_points)
+    # Sampler_tr = Sampler(training_points)
+    # Sampler_val = Sampler(validation_points)
+    Sampler_tr = Sampler_DONet(training_points)
+    Sampler_val = Sampler_DONet(validation_points)
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
@@ -83,10 +88,10 @@ if __name__ == "__main__":
     #         history["losses_val"].append(losses_val)
     #         history["iteration"].append(j)
 
-    PINN_neg.save_model("models/negative_current.pt")
-
-    with open('models/negative_current.pkl', 'wb') as fp:
-        pickle.dump(history, fp)
+    # PINN_neg.save_model("models/negative_current.pt")
+    #
+    # with open('models/negative_current.pkl', 'wb') as fp:
+    #     pickle.dump(history, fp)
 
     # Plot
     plt.figure()
@@ -119,22 +124,27 @@ if __name__ == "__main__":
     pos_SPM_r0 = c_s_p(r=r_p[0], t=t, x=x[-1])
     pos_SPM_r1 = c_s_p(r=r_p[-1], t=t, x=x[-1])
 
+    neg_SPM_r0 = c_s_n(r=r_n[0], t=t, x=x[0])
+    neg_SPM_r1 = c_s_n(r=r_n[-1], t=t, x=x[0])
+
     t_end = t[-1]
+
+    N = torch.ones((3600, 1))
 
     t = np.linspace(0, t_end, num=len(pos_SPM_r1))/3600.
 
-    PINN_pos.update_crate(0.9)
+    PINN_neg.update_crate(0.9)
 
     bcs_sample_t = torch.linspace(0., 1., 1000)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
     bcs_sample_I = torch.ones_like(bcs_sample_t) * 0.9
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
-    c_bcs = PINN_pos(bcs_sample)
+    c_bcs = PINN_neg((bcs_sample, N * 0.9))
 
     plt.figure()
     plt.grid("on")
-    plt.plot(bcs_sample_t.detach().numpy()*PINN_pos.tc/3600., c_bcs.detach().numpy(), "k", label="PINN")
-    plt.plot(t, pos_SPM_r1, "r", label="Pybamm")
+    plt.plot(bcs_sample_t.detach().numpy()*PINN_neg.tc/3600., c_bcs.detach().numpy(), "k", label="PINN")
+    plt.plot(t, neg_SPM_r1, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("t [h]")
     plt.ylabel("x [-]")
@@ -142,12 +152,12 @@ if __name__ == "__main__":
 
     bcs_sample_r = torch.zeros_like(bcs_sample_t)
     bcs_sample_r0 = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
-    c_bcs_r0 = PINN_pos(bcs_sample_r0)
+    c_bcs_r0 = PINN_neg((bcs_sample_r0, N * 0.9))
 
     plt.figure()
     plt.grid("on")
-    plt.plot(bcs_sample_t.detach().numpy()*PINN_pos.tc/3600., c_bcs_r0.detach().numpy(), "k", label="PINN")
-    plt.plot(t, pos_SPM_r0, "r", label="Pybamm")
+    plt.plot(bcs_sample_t.detach().numpy()*PINN_neg.tc/3600., c_bcs_r0.detach().numpy(), "k", label="PINN")
+    plt.plot(t, neg_SPM_r0, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("t [h]")
     plt.ylabel("x [-]")

@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="e3018417-8954-46ed-a971-a90a9f9bf9f5" name="Changes" comment="Started own implementation">
+      <change afterPath="$PROJECT_DIR$/batxi1.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/evaluation.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/evaluation.ipynb" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/own_impl_electrolyte.py" beforeDir="false" afterPath="$PROJECT_DIR$/own_impl_electrolyte.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scr/SPMe.py" beforeDir="false" afterPath="$PROJECT_DIR$/scr/SPMe.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/scr/utils.py" beforeDir="false" afterPath="$PROJECT_DIR$/scr/utils.py" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="FileTemplateManagerImpl">
+    <option name="RECENT_TEMPLATES">
+      <list>
+        <option value="Jupyter Notebook" />
+        <option value="Python Script" />
+      </list>
+    </option>
+  </component>
+  <component name="FlaskConsoleOptions" custom-start-script="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))">
+    <envs>
+      <env key="FLASK_APP" value="app" />
+    </envs>
+    <option name="myCustomStartScript" value="import sys&#10;sys.path.extend([WORKING_DIR_AND_PYTHON_PATHS])&#10;from flask.cli import ScriptInfo&#10;locals().update(ScriptInfo(create_app=None).load_app().make_shell_context())&#10;print(&quot;Python %s on %s\nApp: %s [%s]\nInstance: %s&quot; % (sys.version, sys.platform, app.import_name, app.env, app.instance_path))" />
+    <option name="myEnvs">
+      <map>
+        <entry key="FLASK_APP" value="app" />
+      </map>
+    </option>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;JosuYeregui&quot;
+  }
+}</component>
+  <component name="GithubPullRequestsUISettings">
+    <option name="selectedUrlAndAccountId">
+      <UrlAndAccount>
+        <option name="accountId" value="7a567945-4020-4874-9e9c-6b228d473e5b" />
+        <option name="url" value="https://github.com/JosuYeregui/PINN-DeepONet.git" />
+      </UrlAndAccount>
+    </option>
+  </component>
+  <component name="MarkdownSettingsMigration">
+    <option name="stateVersion" value="1" />
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 0
+}</component>
+  <component name="ProjectId" id="2bwEiA8aa7HgnAqMmIcLYT2Inon" />
+  <component name="ProjectLevelVcsManager">
+    <ConfirmationsSetting value="2" id="Add" />
+  </component>
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;Python.ADR_solver.executor&quot;: &quot;Run&quot;,
+    &quot;Python.SPMe.executor&quot;: &quot;Run&quot;,
+    &quot;Python.batxi1.executor&quot;: &quot;Debug&quot;,
+    &quot;Python.concenctration.executor&quot;: &quot;Run&quot;,
+    &quot;Python.concenctration_cry.executor&quot;: &quot;Run&quot;,
+    &quot;Python.electrolyte.executor&quot;: &quot;Run&quot;,
+    &quot;Python.main.executor&quot;: &quot;Run&quot;,
+    &quot;Python.own_impl_electrolyte.executor&quot;: &quot;Run&quot;,
+    &quot;Python.test.executor&quot;: &quot;Run&quot;,
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;own__implementation&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/jyeregui/Desktop&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;PyScientificConfigurable&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
+  }
+}</component>
+  <component name="RecentsManager">
+    <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\jyeregui\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet" />
+      <recent name="C:\Users\jyeregui\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet\scr" />
+      <recent name="C:\Users\Josu\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet\scr" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="C:\Users\Josu\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet" />
+      <recent name="C:\Users\jyeregui\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet" />
+      <recent name="C:\Users\jyeregui\Dropbox (MGEP)\Josu\1. Tesia\1.7 PINN DeepONet\PINN DeepONet\scr" />
+    </key>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-python-sdk-5a2391486177-2887949eec09-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-233.13763.11" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="e3018417-8954-46ed-a971-a90a9f9bf9f5" name="Changes" comment="" />
+      <created>1707117866031</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1707117866031</updated>
+      <workItem from="1707117867080" duration="22907000" />
+      <workItem from="1707213493209" duration="2960000" />
+      <workItem from="1707291249803" duration="1382000" />
+      <workItem from="1707396656750" duration="2389000" />
+      <workItem from="1708074092919" duration="19000" />
+      <workItem from="1708328453903" duration="6355000" />
+      <workItem from="1708416240543" duration="23213000" />
+      <workItem from="1708500801805" duration="11695000" />
+      <workItem from="1708586861816" duration="600000" />
+      <workItem from="1708670849447" duration="15043000" />
+      <workItem from="1708765784549" duration="1880000" />
+      <workItem from="1708849342937" duration="3401000" />
+      <workItem from="1708933353722" duration="10860000" />
+      <workItem from="1708961489175" duration="1194000" />
+      <workItem from="1709022042332" duration="1249000" />
+      <workItem from="1709540760041" duration="1196000" />
+      <workItem from="1709711820036" duration="15137000" />
+      <workItem from="1709802274686" duration="7615000" />
+      <workItem from="1710139167612" duration="3666000" />
+      <workItem from="1710229115758" duration="4156000" />
+      <workItem from="1710318326300" duration="1192000" />
+      <workItem from="1710401786789" duration="10943000" />
+      <workItem from="1710497613622" duration="1342000" />
+      <workItem from="1710836928019" duration="832000" />
+      <workItem from="1710917833461" duration="2386000" />
+      <workItem from="1711010400577" duration="2416000" />
+      <workItem from="1711438316565" duration="597000" />
+      <workItem from="1712216739304" duration="1190000" />
+      <workItem from="1712562412640" duration="23444000" />
+      <workItem from="1712647102265" duration="25529000" />
+      <workItem from="1712734198264" duration="23400000" />
+      <workItem from="1712821154660" duration="30998000" />
+      <workItem from="1712906974033" duration="8355000" />
+      <workItem from="1713160665073" duration="2617000" />
+      <workItem from="1713166059049" duration="596000" />
+      <workItem from="1713254755850" duration="1191000" />
+      <workItem from="1713335939400" duration="1306000" />
+      <workItem from="1713345532858" duration="594000" />
+      <workItem from="1713431219836" duration="8564000" />
+      <workItem from="1713509388231" duration="2000" />
+      <workItem from="1713509413229" duration="18497000" />
+      <workItem from="1713768761226" duration="25000" />
+    </task>
+    <task id="LOCAL-00001" summary="failed tests">
+      <option name="closed" value="true" />
+      <created>1707138457117</created>
+      <option name="number" value="00001" />
+      <option name="presentableId" value="LOCAL-00001" />
+      <option name="project" value="LOCAL" />
+      <updated>1707138457117</updated>
+    </task>
+    <task id="LOCAL-00002" summary="Electrylyte failed">
+      <option name="closed" value="true" />
+      <created>1707266195077</created>
+      <option name="number" value="00002" />
+      <option name="presentableId" value="LOCAL-00002" />
+      <option name="project" value="LOCAL" />
+      <updated>1707266195077</updated>
+    </task>
+    <task id="LOCAL-00003" summary="Started own implementation">
+      <option name="closed" value="true" />
+      <created>1710160014206</created>
+      <option name="number" value="00003" />
+      <option name="presentableId" value="LOCAL-00003" />
+      <option name="project" value="LOCAL" />
+      <updated>1710160014206</updated>
+    </task>
+    <option name="localTasksCounter" value="4" />
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State />
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="VcsManagerConfiguration">
+    <MESSAGE value="failed tests" />
+    <MESSAGE value="Electrylyte failed" />
+    <MESSAGE value="Started own implementation" />
+    <option name="LAST_COMMIT_MESSAGE" value="Started own implementation" />
+  </component>
+  <component name="XDebuggerManager">
+    <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file://$PROJECT_DIR$/batxi1.py</url>
+          <line>39</line>
+          <option name="timeStamp" value="6" />
+        </line-breakpoint>
+      </breakpoints>
+    </breakpoint-manager>
+  </component>
+  <component name="com.intellij.coverage.CoverageDataManagerImpl">
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$concenctration_pybamm.coverage" NAME="concenctration_pybamm Coverage Results" MODIFIED="1709730340950" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$pbm_testing.coverage" NAME="pbm_testing Coverage Results" MODIFIED="1712653012495" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$evaluation.coverage" NAME="evaluation Coverage Results" MODIFIED="1712676715942" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$electrolyte.coverage" NAME="electrolyte Coverage Results" MODIFIED="1708418295275" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$main.coverage" NAME="main Coverage Results" MODIFIED="1707291710235" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$own_impl.coverage" NAME="own_impl Coverage Results" MODIFIED="1712836938244" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$concenctration_cry.coverage" NAME="concenctration_cry Coverage Results" MODIFIED="1709745577895" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$batxi1.coverage" NAME="batxi1 Coverage Results" MODIFIED="1713538886237" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$.coverage" NAME=" Coverage Results" MODIFIED="1712536250134" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr/own_implementation" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$sampling.coverage" NAME="sampling Coverage Results" MODIFIED="1712567734411" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$own_impl_electrolyte.coverage" NAME="own_impl_electrolyte Coverage Results" MODIFIED="1713538829863" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$test.coverage" NAME="test Coverage Results" MODIFIED="1709811062868" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$concenctration.coverage" NAME="concenctration Coverage Results" MODIFIED="1708673005665" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$ADR_solver.coverage" NAME="ADR_solver Coverage Results" MODIFIED="1707118688184" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$SPMe.coverage" NAME="SPMe Coverage Results" MODIFIED="1713432965321" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+    <SUITE FILE_PATH="coverage/PINN_DeepONet$SPM.coverage" NAME="SPM Coverage Results" MODIFIED="1712871180242" SOURCE_PROVIDER="com.intellij.coverage.DefaultCoverageFileProvider" RUNNER="coverage.py" COVERAGE_BY_TEST_ENABLED="true" COVERAGE_TRACING_ENABLED="false" WORKING_DIRECTORY="$PROJECT_DIR$/scr" />
+  </component>
+</project>

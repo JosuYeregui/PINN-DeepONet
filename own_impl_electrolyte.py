@@ -39,8 +39,10 @@ if __name__ == "__main__":
 
     C_rates_tr = [1.]
     C_rates_val = [1.]
+    test_C = 1.
 
-    model = FFNN(3, 1)
+    # model = FFNN_old(3, 1)
+    model = FFNN(layers=[32, 32, 32], input_dim=3, output_dim=1, dropout=0.)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN_elec = Electrolyte(model, parameters, criterion=RMSELoss, weights=weights)
 
@@ -84,8 +86,9 @@ if __name__ == "__main__":
     # Evaluation
     # param = pybamm.ParameterValues("ORegan2022")
     param = pybamm.ParameterValues("Chen2020")
+    param['Electrolyte diffusivity [m2.s-1]'] = lambda c, T: 4.862e-10
     PBM_model = pybamm.lithium_ion.SPMe()
-    experiment = pybamm.Experiment(["Discharge at 1C for 10000 seconds or until 2.5 V"])
+    experiment = pybamm.Experiment(["Discharge at "+ str(test_C) + "C for 100000 seconds or until 2.5 V"])
     sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
     sol = sim.solve(initial_soc=1)
 
@@ -102,13 +105,13 @@ if __name__ == "__main__":
 
     t_end = t[-1]
 
-    t = np.linspace(0, t_end, num=len(ce_tend))/3600.
+    t = np.linspace(0, t_end, num=len(ce_tend))/PINN_elec.tc
 
     PINN_elec.update_crate(1.)
 
     bcs_sample_x = torch.linspace(0., 1., 1000)
     bcs_sample_t = torch.zeros_like(bcs_sample_x)
-    bcs_sample_I = torch.ones_like(bcs_sample_t) * 1.
+    bcs_sample_I = torch.ones_like(bcs_sample_t) * test_C
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_x, bcs_sample_I]).t()
     ce_PINN_t0 = PINN_elec(bcs_sample)
 
@@ -121,7 +124,7 @@ if __name__ == "__main__":
     # plt.plot(bcs_sample_t.detach().numpy() * PINN_elec.tc / 3600., ce_PINN_t0.detach().numpy(), "k", label="PINN")
     # plt.plot(t, ce_t0, "r", label="Pybamm")
     plt.plot(bcs_sample_x.detach().numpy() * PINN_elec.tc / 3600., ce_PINN_tend.detach().numpy(), "k", label="PINN")
-    plt.plot(t, ce_tend/parameters["ce0"], "r", label="Pybamm")
+    plt.plot(x/parameters["L"], ce_tend/parameters["ce0"], "r", label="Pybamm")
     plt.legend()
     plt.xlabel("r [-]")
     plt.ylabel("x [-]")

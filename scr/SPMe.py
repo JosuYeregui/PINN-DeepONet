@@ -37,29 +37,32 @@ class Solid_Phase(PINN):
 
         loss = []
 
-        pde_sample = sampler.points["PDE"] * torch.Tensor([1., 1., self.C_rate])
+        pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        x_pde = sampler.get_points("PDE")
         c_pde = self(pde_sample)
 
-        loss.append(self.weights["PDE"] * self.criterion(self._pde(pde_sample, c_pde),
+        loss.append(self.weights["PDE"] * self.criterion(self._pde(x_pde, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        iv_sample = sampler.points["IV"] * torch.Tensor([1., 1., self.C_rate])
+        iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         c_iv = self(iv_sample)
 
         loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
                                                         torch.zeros_like(c_iv)))
 
-        bcc_sample = sampler.points["BC_Center"] * torch.Tensor([1., 1., self.C_rate])
+        bcc_sample = sampler.sample("BC_Center", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        x_bcc = sampler.get_points("BC_Center")
         c_bcc = self(bcc_sample)
 
-        loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(bcc_sample, c_bcc),
+        loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(x_bcc, c_bcc),
                                                                torch.zeros_like(c_bcc)))
 
-        bcs_sample = sampler.points["BC_Surf"] * torch.Tensor([1., 1., self.C_rate])
+        bcs_sample = sampler.sample("BC_Surf", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        x_bcs = sampler.get_points("BC_Surf")
         c_bcs = self(bcs_sample)
 
         loss.append(self.weights["BC_Surf"] *
-                    self.criterion(self._bc_surf(bcs_sample, c_bcs, -self.C_rate * self.params["I_typ"]),
+                    self.criterion(self._bc_surf(x_bcs, c_bcs, -self.C_rate * self.params["I_typ"]),
                                    torch.zeros_like(c_bcs)))
 
         hist = np.array([l_hist.detach().numpy() for l_hist in loss])
@@ -147,28 +150,28 @@ class Electrolyte(PINN):
 
         i_app = self.C_rate * self.params["I_typ"] / self.params["A"]
 
-        pde_sample = sampler.points["PDE"] * torch.Tensor([1., 1., self.C_rate])
+        pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         c_pde = self(pde_sample)
 
         loss.append(self.weights["PDE"] * self.criterion(self._pde(pde_sample, c_pde, i_app),
                                                          torch.zeros_like(c_pde)))
 
-        iv_sample = sampler.points["IV"] * torch.Tensor([1., 1., self.C_rate])
+        iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         c_iv = self(iv_sample)
 
         loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv), torch.zeros_like(c_iv)))
 
-        bcc_sample = sampler.points["BC_Left"] * torch.Tensor([1., 1., self.C_rate])
+        bcc_sample = sampler.sample("BC_Left", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         c_bcc = self(bcc_sample)
 
-        loss.append(self.weights["BC_Left"] * self.criterion(self._bc(bcc_sample, c_bcc, i_app),
-                                                               torch.zeros_like(c_bcc)))
+        loss.append(self.weights["BC_Left"] * self.criterion(self._bc(bcc_sample, c_bcc),
+                                                             torch.zeros_like(c_bcc)))
 
-        bcs_sample = sampler.points["BC_Right"] * torch.Tensor([1., 1., self.C_rate])
+        bcs_sample = sampler.sample("BC_Right", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         c_bcs = self(bcs_sample)
 
         loss.append(self.weights["BC_Right"] *
-                    self.criterion(self._bc(bcs_sample, c_bcs, i_app),
+                    self.criterion(self._bc(bcs_sample, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
         hist = np.array([l_hist.detach().numpy() for l_hist in loss])
@@ -251,7 +254,7 @@ class Electrolyte(PINN):
 
         return left - right
 
-    def _bc(self, x, c, i_app):
+    def _bc(self, x, c):
 
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]

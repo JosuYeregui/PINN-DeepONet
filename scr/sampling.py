@@ -12,6 +12,12 @@ class Sampler:
 
         self.update_samples(init_point_data)
 
+    def sample(self, cond, scale, sc_none):
+        return self.points[cond] * scale
+
+    def get_points(self, cond):
+        return self.points[cond]
+
     def update_samples(self, point_data):
 
         for cond in point_data:
@@ -66,4 +72,18 @@ class Sampler:
             skip = 1
         space = [(0.0, 1.0)] * dimension
         return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
+
+
+class Sampler_DONet(Sampler):
+
+    def __init__(self, init_point_data, mode="pseudo"):
+        super(Sampler_DONet, self).__init__(init_point_data, mode)
+
+        self.N = torch.ones((3600, 1))
+
+    def sample(self, cond, scale_point, scale_N, **kwargs):
+
+        return (self.points[cond] * scale_point, self.N * scale_N)
+
+
 
