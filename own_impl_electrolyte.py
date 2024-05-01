@@ -52,7 +52,7 @@ if __name__ == "__main__":
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Left \t BC Right \t\t\t PDE \t IV \t BC Left \t BC Right")
-    for j in range(3000 + 1):
+    for j in range(50000 + 1):
 
         PINN_elec.update_crate(np.random.choice(C_rates_tr))
         loss_tr, losses_tr = PINN_elec.train_step(optimizer, Sampler_tr)

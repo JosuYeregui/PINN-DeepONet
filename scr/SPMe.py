@@ -226,8 +226,7 @@ class Electrolyte(PINN):
 
         return left - right
 
-    def _pde(self, x, c, i_app):
-
+    def _pde_Iker(self, x, c, i_app):
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
@@ -249,6 +248,37 @@ class Electrolyte(PINN):
         dNdx[idx_Lp] *= self.params["por_p"] ** self.params["brug"]
         right = torch.autograd.grad(dNdx, x, grad_outputs=torch.ones_like(dNdx),
                                     create_graph=True)[0][:, 1] / self.params["L"]
+        right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
+        right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
+
+        return left - right
+
+    def _pde(self, x, c, i_app):
+
+        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
+
+        L_n = self.params["L_n"] / self.params["L"]
+        L_s = self.params["L_s"] / self.params["L"]
+
+        idx_Ln = x[:, 1] < L_n
+        idx_Lp = x[:, 1] > L_n + L_s
+        idx_Ls = (L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)
+
+        left = dcdx[:, 0] * self.params["ce0"] / self.tc  # * self.params["por_n"]
+        left[idx_Ln] *= self.params["por_n"]
+        left[idx_Ls] *= self.params["por_s"]
+        left[idx_Lp] *= self.params["por_p"]
+
+        right = torch.autograd.grad(dcdx[:, 1], x, grad_outputs=torch.ones_like(dcdx[:, 1]),
+                                    create_graph=True)[0][:, 1]
+        De_eff = torch.ones_like(right) * self.params["D_e_const"]
+        De_eff[idx_Ln] *= self.params["por_n"] ** self.params["brug"]
+        De_eff[idx_Ls] *= self.params["por_s"] ** self.params["brug"]
+        De_eff[idx_Lp] *= self.params["por_p"] ** self.params["brug"]
+
+        right *= De_eff * self.params["ce0"] / self.params["L"] ** 2
+
         right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
         right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
 

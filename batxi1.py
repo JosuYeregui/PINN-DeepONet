@@ -95,6 +95,44 @@ def pde_ns(x, c, t, C_rate, params, Ne):
     return result
 
 
+def pde_ns_new(x, c, t, C_rate, params, Ne):
+
+    i_app = C_rate * params["I_typ"] / params["A"]
+
+    dcdx = np.transpose(np.transpose(np.diff(c, axis=0)) / np.diff(x))
+    dcdx = np.concatenate([dcdx, dcdx[-1,:].reshape(1,-1)], axis=0)
+    dcdt = np.diff(c, axis=-1) / np.diff(t)
+    dcdt = np.concatenate([dcdt, dcdt[:,-1].reshape(-1,1)], axis=1)
+
+    dccdxx = np.transpose(np.transpose(np.diff(dcdx, axis=0)) / np.diff(x))
+    dccdxx = np.concatenate([dccdxx, dccdxx[-1, :].reshape(1, -1)], axis=0)
+
+    L_n = params["L_n"]
+    L_s = params["L_s"]
+
+    idx_Ln = x < L_n
+    idx_Lp = x > L_n + L_s
+    idx_Ls = (L_n <= x) & (x <= L_n + L_s)
+
+    left = dcdt.copy()  # * self.params["por_n"]
+    left[idx_Ln, :] *= params["por_n"]
+    left[idx_Ls, :] *= params["por_s"]
+    left[idx_Lp, :] *= params["por_p"]
+
+    right = dccdxx.copy()
+    right[idx_Ln, :] *= (params["por_n"] ** params["brug"]) * params["D_e_const"]
+    right[idx_Ls, :] *= (params["por_s"] ** params["brug"]) * params["D_e_const"]
+    right[idx_Lp, :] *= (params["por_p"] ** params["brug"]) * params["D_e_const"]
+
+    right[idx_Ln, :] += i_app / (params["F"] * params["L_n"]) * (1 - params["t_plus"])
+    right[idx_Lp, :] -= i_app / (params["F"] * params["L_p"]) * (1 - params["t_plus"])
+
+
+    result = left - right
+
+    return result
+
+
 if __name__ == "__main__":
 
     parameters = load_params()
@@ -116,11 +154,12 @@ if __name__ == "__main__":
     t = sol["Time [s]"].entries[:-1]
     t_test = np.arange(0, t[-1], 1)
     x = sol["x [m]"].entries[:, 0]
+    x_test = np.arange(0, x[-1], 1e-7)
     ce_tend = ce(t=t_test, x=x)
     Ne_tend = Ne(t=t_test, x=x)
 
     # result = pde(x/parameters["L"], ce_tend/parameters["ce0"], t_test, test_C, parameters)
-    result = pde_ns(x, ce_tend, t_test, test_C, parameters, Ne_tend)
+    result = pde_ns_new(x, ce_tend, t_test, test_C, parameters, Ne_tend)
     print(result)
 
 
