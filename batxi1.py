@@ -127,7 +127,6 @@ def pde_ns_new(x, c, t, C_rate, params, Ne):
     right[idx_Ln, :] += i_app / (params["F"] * params["L_n"]) * (1 - params["t_plus"])
     right[idx_Lp, :] -= i_app / (params["F"] * params["L_p"]) * (1 - params["t_plus"])
 
-
     result = left - right
 
     return result

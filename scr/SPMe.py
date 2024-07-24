@@ -21,10 +21,10 @@ class Solid_Phase(PINN):
             self.weights = weights
 
         if electrode == "pos":
-            self.electrode = -1.
+            self.electrode = 1.
             self.el_name = "p"
         elif electrode == "neg":
-            self.electrode = 1.
+            self.electrode = -1.
             self.el_name = "n"
         else:
             raise ValueError("Selected electrode type is not compatible")
@@ -37,32 +37,45 @@ class Solid_Phase(PINN):
 
         loss = []
 
-        pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        x_pde = sampler.get_points("PDE")
+        # pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        pde_sample = sampler.sample("PDE")
+        if isinstance(pde_sample, tuple):
+            x_pde = pde_sample[0]
+        else:
+            x_pde = pde_sample
         c_pde = self(pde_sample)
 
         loss.append(self.weights["PDE"] * self.criterion(self._pde(x_pde, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        # iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        iv_sample = sampler.sample("IV")
         c_iv = self(iv_sample)
 
         loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
                                                         torch.zeros_like(c_iv)))
 
-        bcc_sample = sampler.sample("BC_Center", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        x_bcc = sampler.get_points("BC_Center")
+        # bcc_sample = sampler.sample("BC_Center", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        bcc_sample = sampler.sample("BC_Center") # , torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        if isinstance(bcc_sample, tuple):
+            x_bcc = bcc_sample[0]
+        else:
+            x_bcc = bcc_sample
         c_bcc = self(bcc_sample)
 
         loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(x_bcc, c_bcc),
                                                                torch.zeros_like(c_bcc)))
 
-        bcs_sample = sampler.sample("BC_Surf", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        x_bcs = sampler.get_points("BC_Surf")
+        # bcs_sample = sampler.sample("BC_Surf", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        bcs_sample = sampler.sample("BC_Surf")
+        if isinstance(bcs_sample, tuple):
+            x_bcs = bcs_sample[0]
+        else:
+            x_bcs = bcs_sample
         c_bcs = self(bcs_sample)
 
         loss.append(self.weights["BC_Surf"] *
-                    self.criterion(self._bc_surf(x_bcs, c_bcs, -self.C_rate * self.params["I_typ"]),
+                    self.criterion(self._bc_surf(x_bcs, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
         hist = np.array([l_hist.detach().numpy() for l_hist in loss])
@@ -76,7 +89,11 @@ class Solid_Phase(PINN):
         self.model.eval()
         #
         c_pde = self(samples)
-        residuals = self._pde(samples, c_pde)
+        if isinstance(samples, tuple):
+            x = samples[0]
+        else:
+            x = samples
+        residuals = self._pde(x, c_pde)
 
         return residuals
 
@@ -85,7 +102,11 @@ class Solid_Phase(PINN):
         self.model.eval()
         #
         c = self(samples)
-        dcdx = torch.autograd.grad(c, samples, grad_outputs=torch.ones_like(c),
+        if isinstance(samples, tuple):
+            x = samples[0]
+        else:
+            x = samples
+        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
         return dcdx
@@ -108,18 +129,23 @@ class Solid_Phase(PINN):
 
         return dcdr[:, 1]
 
-    def _bc_surf(self, x, c, i_app):
+    def _bc_surf(self, x, c):
 
-        dcdr = - torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
-                                     create_graph=True)[0]
+        i_app = - x[:, 2] * self.params["I_typ"] / self.params["A"]
+
+        dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
 
         def regularization(t):
             return 0.5 * (1 + torch.tanh((t - self.tc*0.01/self.tc) / (self.tc*0.01/self.tc)))
 
-        return (- dcdr[:, 1] - regularization(x[:, 0]) * self.electrode * np.power(self.params["R_"+self.el_name], 2) *
-                i_app / (3 * self.params["eps_"+self.el_name] * self.params["D_"+self.el_name] *
-                         self.params["L_"+self.el_name] * self.params["F"] * self.params["A"] *
-                         self.params["c_"+self.el_name+"_max"]))
+        N = (dcdr[:, 1] * self.params["D_"+self.el_name] * self.params["c_"+self.el_name+"_max"] /
+             self.params["R_"+self.el_name])
+
+        j = i_app * self.electrode / (self.params["as_"+self.el_name] *
+                                      self.params["L_"+self.el_name] * self.params["F"])
+
+        return N + j * regularization(x[:, 0])
 
     def _iv(self, c0, soc):
         return c0 - (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -

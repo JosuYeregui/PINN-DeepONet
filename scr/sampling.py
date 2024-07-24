@@ -5,18 +5,28 @@ import torch
 
 class Sampler:
 
-    def __init__(self, init_point_data, mode="pseudo"):
+    def __init__(self, init_point_data, current_func, mode="pseudo"):
 
         self.points = dict()
+        self.points_tch = dict()
         self.mode = mode
+        self.current_func = current_func
 
         self.update_samples(init_point_data)
 
-    def sample(self, cond, scale, sc_none):
-        return self.points[cond] * scale
+    def sample(self, cond):
+        return torch.tensor(self.points[cond], requires_grad=True)
 
     def get_points(self, cond):
-        return self.points[cond]
+        return self.points_tch[cond]
+
+    def update_current_func(self, current_func):
+
+        self.current_func = current_func
+
+        for cond in self.points:
+
+            self.points[cond][:, 2] = self.current_func(self.points[cond][:, 0] * 3600.)
 
     def update_samples(self, point_data):
 
@@ -30,18 +40,20 @@ class Sampler:
             else:
                 raise NotImplementedError("The sampling type does not exist")
 
-            points = torch.concat([points, torch.ones((points.size()[0], 1))], dim=1)
+            cur = self.current_func(points[:, 0] * 3600.)
+            points = np.concatenate([points, cur.reshape((-1, 1))], axis=1)
             self.points[cond] = points
+            self.points_tch[cond] = self._cast_torch(points)
 
     def update_iv(self, n):
         x = self.sample_modes(n, 1)
-        t = torch.zeros_like(x)
-        return torch.concat([t, x], dim=1)
+        t = np.zeros_like(x)
+        return np.concatenate([t, x], axis=1)
 
     def update_bc(self, n, bc_pos):
         t = self.sample_modes(n, 1)
-        x = torch.ones_like(t) * bc_pos
-        return torch.concat([t, x], dim=1)
+        x = np.ones_like(t) * bc_pos
+        return np.concatenate([t, x], axis=1)
 
     def update_pde(self, n):
         return self.sample_modes(n, 2)
@@ -49,12 +61,35 @@ class Sampler:
     def sample_modes(self, n, n_dim):
 
         if self.mode == "uniform":
-            return torch.tensor(self._quasirandom(n, n_dim).astype(np.float32), requires_grad=True)
+            return self._uniform(n, n_dim).astype(np.float32)
         elif self.mode == "pseudo":
-            return torch.tensor(self._pseudorandom(n, n_dim).astype(np.float32), requires_grad=True)
+            return self._pseudorandom(n, n_dim).astype(np.float32)
         elif self.mode == "quasi":
-            return torch.tensor(self._quasirandom(n, n_dim).astype(np.float32), requires_grad=True)
+            return self._quasirandom(n, n_dim).astype(np.float32)
         raise ValueError("Sampler method not defined!")
+
+    @staticmethod
+    def _uniform(n_samples, dimension):
+        """Uniform sampling"""
+        if dimension == 1:
+            return np.linspace(0, 1, n_samples).reshape(-1, 1)
+        elif dimension == 2:
+            num_points_per_dim = int(np.sqrt(n_samples))
+
+            # Calculate the spacing between points
+            step_size = 1.0 / num_points_per_dim
+
+            # Generate points
+            points = []
+            for i in range(num_points_per_dim):
+                for j in range(num_points_per_dim):
+                    x = (i + 0.5) * step_size  # Center of the grid cell
+                    y = (j + 0.5) * step_size  # Center of the grid cell
+                    points.append((x, y))
+
+            return np.array(points)
+        else:
+            raise ValueError("Dimension number not supported!")
 
     @staticmethod
     def _pseudorandom(n_samples, dimension):
@@ -73,17 +108,30 @@ class Sampler:
         space = [(0.0, 1.0)] * dimension
         return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
 
+    @staticmethod
+    def _cast_torch(array):
+        return torch.tensor(array, requires_grad=True)
+
 
 class Sampler_DONet(Sampler):
 
-    def __init__(self, init_point_data, mode="pseudo"):
-        super(Sampler_DONet, self).__init__(init_point_data, mode)
+    def __init__(self, init_point_data, current_func, mode="pseudo"):
+        super(Sampler_DONet, self).__init__(init_point_data, current_func, mode)
 
-        self.N = torch.ones((3600, 1))
+        self.t = np.arange(0, 3600, 10, dtype=np.float32)
+        self.N = current_func(self.t)
+        self.N_tch = self._cast_torch(self.N)
 
-    def sample(self, cond, scale_point, scale_N, **kwargs):
+    def sample(self, cond, **kwargs):
 
-        return (self.points[cond] * scale_point, self.N * scale_N)
+        return (self.points_tch[cond], self.N_tch)
 
+    def update_current_func(self, current_func):
+        self.current_func = current_func
 
+        for cond in self.points:
+            self.points[cond][:, 2] = self.current_func(self.points[cond][:, 0] * 3600)
+            self.points_tch[cond] = self._cast_torch(self.points[cond])
 
+        self.N = current_func(self.t)
+        self.N_tch = self._cast_torch(self.N)
