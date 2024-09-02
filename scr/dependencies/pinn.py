@@ -111,7 +111,7 @@ class PINN(nn.Module):
         return loss_val, losses_val
 
     @staticmethod
-    def _init_weights(self, m):
+    def _init_weights(m):
         """
         Initializes the weights of the NN (see Xavier Glorot initialization)
         :param m: Element of the model, applies initialization if it is a nn.Linear type layer.

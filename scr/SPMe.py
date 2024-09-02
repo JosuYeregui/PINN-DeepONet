@@ -1,4 +1,4 @@
-from scr.pinn import PINN
+from scr.dependencies.pinn import PINN
 
 import torch
 from torch import nn

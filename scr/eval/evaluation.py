@@ -1,6 +1,6 @@
 from scr.SPMe import Solid_Phase
-from scr.pinn import FFNN
-from scr.utils import load_params
+from scr.dependencies.pinn import FFNN
+from scr.dependencies.utils import load_params
 
 import ipywidgets as widgets
 import matplotlib.pyplot as plt

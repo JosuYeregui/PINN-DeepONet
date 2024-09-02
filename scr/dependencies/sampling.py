@@ -4,7 +4,9 @@ import torch
 
 
 class Sampler:
-
+    """
+    Sampler to feed the NN following the PINN needs
+    """
     def __init__(self, init_point_data, current_func, mode="pseudo"):
 
         self.points = dict()
@@ -114,7 +116,10 @@ class Sampler:
 
 
 class Sampler_DONet(Sampler):
-
+    """
+    Sampler compatible with the DeepONet architecture. The data needed for the network differs as the input to the
+    DeepONet requires a separated input of the sensors (input current) to the branch net.
+    """
     def __init__(self, init_point_data, current_func, mode="pseudo"):
         super(Sampler_DONet, self).__init__(init_point_data, current_func, mode)
 
