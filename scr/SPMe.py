@@ -1,4 +1,6 @@
-from scr.dependencies.pinn import PINN
+import pylab as pl
+
+from scr.utils.pinn import PINN
 
 import torch
 from torch import nn
@@ -6,20 +8,25 @@ import numpy as np
 
 
 class Solid_Phase(PINN):
-
+    """
+    PINN for Solid phase of the battery for both negative and positive electrodes.
+    """
     def __init__(self, model, parameters, criterion=nn.MSELoss(), c_rate=1.,
                  electrode="pos", weights=None):
         super().__init__(model, criterion)
 
         self.params = parameters
 
-        self.C_rate = c_rate
+        # For scaling purposes a characteristic time is specified
         self.tc = (1./c_rate)*3600.
 
+        # The loss function has weighted terms, received as input or not scaled
         self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
         if weights is not None:
             self.weights = weights
 
+        # There are certain differences between the positive and negative domain solid equations,
+        # mainly in flux direction
         if electrode == "pos":
             self.electrode = 1.
             self.el_name = "p"
@@ -29,17 +36,25 @@ class Solid_Phase(PINN):
         else:
             raise ValueError("Selected electrode type is not compatible")
 
-    def update_crate(self, c_rate):
-        self.C_rate = c_rate
+    def update_tc(self, c_rate):
+        """
+        Updates the current characteristic time
+        :param c_rate: New C-rate to base the time on
+        """
         self.tc = (1. / c_rate) * 3600.
 
     def compute_loss(self, sampler):
-
+        """
+        Computes the loss function based on the solid-phase equations of a SPMe.
+        See https://docs.pybamm.org/en/stable/source/examples/notebooks/models/SPMe.html
+        :param sampler: Sampler object to obtain evaluation points on different domains
+        :return: Total (in computational graph) and spliced loss value s
+        """
         loss = []
 
-        # pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        # PDE loss
         pde_sample = sampler.sample("PDE")
-        if isinstance(pde_sample, tuple):
+        if isinstance(pde_sample, tuple):  # In case of a DeepONet a tuple with (x, N) is returned
             x_pde = pde_sample[0]
         else:
             x_pde = pde_sample
@@ -48,16 +63,16 @@ class Solid_Phase(PINN):
         loss.append(self.weights["PDE"] * self.criterion(self._pde(x_pde, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        # iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        # Initial Value loss
         iv_sample = sampler.sample("IV")
         c_iv = self(iv_sample)
 
         loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
                                                         torch.zeros_like(c_iv)))
 
-        # bcc_sample = sampler.sample("BC_Center", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        bcc_sample = sampler.sample("BC_Center") # , torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        if isinstance(bcc_sample, tuple):
+        # Boundary Condition (Centre) loss
+        bcc_sample = sampler.sample("BC_Center")
+        if isinstance(bcc_sample, tuple):  # In case of a DeepONet a tuple with (x, N) is returned
             x_bcc = bcc_sample[0]
         else:
             x_bcc = bcc_sample
@@ -66,9 +81,9 @@ class Solid_Phase(PINN):
         loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(x_bcc, c_bcc),
                                                                torch.zeros_like(c_bcc)))
 
-        # bcs_sample = sampler.sample("BC_Surf", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        # Boundary Condition (Surface) loss
         bcs_sample = sampler.sample("BC_Surf")
-        if isinstance(bcs_sample, tuple):
+        if isinstance(bcs_sample, tuple):  # In case of a DeepONet a tuple with (x, N) is returned
             x_bcs = bcs_sample[0]
         else:
             x_bcs = bcs_sample
@@ -78,16 +93,21 @@ class Solid_Phase(PINN):
                     self.criterion(self._bc_surf(x_bcs, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
+        # Save individual losses and total loss
         hist = np.array([l_hist.detach().numpy() for l_hist in loss])
-
         loss = torch.sum(torch.stack(loss))
 
         return loss, hist
 
     def compute_residuals(self, samples):
+        """
+        Auxiliary function to compute the PDE residuals for evaluation purposes.
+        :param samples: Evaluation points for which to compute the residuals. Takes tensor of shape (n_points, 3)
+        :return: Residual values of the PDE left-right equations at sample evaluated points
+        """
 
         self.model.eval()
-        #
+        # Model forward pass and PDE evaluation
         c_pde = self(samples)
         if isinstance(samples, tuple):
             x = samples[0]
@@ -98,9 +118,14 @@ class Solid_Phase(PINN):
         return residuals
 
     def compute_gradients(self, samples):
+        """
+        Auxiliary function to compute the gradients of concentrations wrt the input independent variables.
+        :param samples: Evaluation points for which to compute the residuals. Takes tensor of shape (n_points, 3)
+        :return: Gradient values of the model response wrt input points. Outputs a tensor of shape (n_points, 3)
+        """
 
         self.model.eval()
-        #
+        # Model forward pass and automatic differentiation
         c = self(samples)
         if isinstance(samples, tuple):
             x = samples[0]
@@ -112,7 +137,13 @@ class Solid_Phase(PINN):
         return dcdx
 
     def _pde(self, x, c):
-
+        """
+        Computes the residual of the main PDE equation.
+        $dc/dt = 1/r^2 * d/dr(D * r^2 * dc/dr)$
+        :param x: Independent variables of the PDE.
+        :param c: Concentration at given radius point r and time t.
+        :return: Residual of the PDE.
+        """
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
@@ -123,31 +154,52 @@ class Solid_Phase(PINN):
                 np.power(self.params["R_"+self.el_name], 2) * dr2Ndr[:, 1])
 
     def _bc_centre(self, x, c):
-
+        """
+        Boundary condition at the centre of the solid particle.
+        $N = 0$
+        :param x: Independent variables of the PDE.
+        :param c: Concentration at the center of the solid particle.
+        :return: Returns the residual for the center BC equation.
+        """
         dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
         return dcdr[:, 1]
 
     def _bc_surf(self, x, c):
-
+        """
+        Surface condition at the centre of the solid particle.
+        $N = -j$
+        :param x: Independent variables of the PDE.
+        :param c: Concentration at the surface of the solid particle.
+        :return: Returns the residual for the surface BC equation.
+        """
         i_app = - x[:, 2] * self.params["I_typ"] / self.params["A"]
 
         dcdr = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
 
+        # A regularization is added for the initial t points of the equations where the derivatives are more agressive
         def regularization(t):
             return 0.5 * (1 + torch.tanh((t - self.tc*0.01/self.tc) / (self.tc*0.01/self.tc)))
 
         N = (dcdr[:, 1] * self.params["D_"+self.el_name] * self.params["c_"+self.el_name+"_max"] /
              self.params["R_"+self.el_name])
 
+        # The flux j is an algebraic equation based on the applied current
         j = i_app * self.electrode / (self.params["as_"+self.el_name] *
                                       self.params["L_"+self.el_name] * self.params["F"])
 
         return N + j * regularization(x[:, 0])
 
     def _iv(self, c0, soc):
+        """
+        Initial value condition term of the PDE.
+        $c_ini = c0$
+        :param c0: Concentration at t=0
+        :param soc: State-of-charge of the battery at t=0
+        :return: Returns the residual for the IV condition.
+        """
         return c0 - (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
                                                              self.params["SOL_"+self.el_name][0]) * soc))
 

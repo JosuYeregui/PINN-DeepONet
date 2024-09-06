@@ -1,7 +1,7 @@
 from scr.SPMe import Solid_Phase, Electrolyte
-from scr.dependencies.pinn import FFNN
-from scr.dependencies.sampling import Sampler
-from scr.dependencies.utils import load_params
+from scr.utils.pinn import FFNN
+from scr.utils.sampling import Sampler
+from scr.utils.parameters import load_params
 
 import pybamm
 import torch

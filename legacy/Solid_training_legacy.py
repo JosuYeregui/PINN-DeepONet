@@ -1,7 +1,7 @@
 from scr.SPMe import Solid_Phase
-from scr.dependencies.pinn import FFNN, DeepONet
-from scr.dependencies.sampling import Sampler, Sampler_DONet
-from scr.dependencies.utils import load_params
+from scr.utils.pinn import FFNN, DeepONet
+from scr.utils.sampling import Sampler, Sampler_DONet
+from scr.utils.parameters import load_params
 
 import pybamm
 import torch
