@@ -4,16 +4,14 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-# def zheng_current(beta):
-#     def current(t):
-#         h = torch.ones_like(t)
-#         h[t < 1800] = 1/1800. * t[t < 1800]
-#         h[t >= 1800] = -1 / 1800. * t[t >= 1800] + 2
-#         return -h * beta + 1
-#
-#     return current
 
 def zheng_current(beta):
+    """
+    Variable current function for a given time array. Consists on an hour long test with
+    Based on the work of Zheng et.al.
+    :param beta:
+    :return: Current profile function for a given t array sequence.
+    """
     def current(t):
         h = np.ones_like(t.copy(), dtype=np.float32)
         h[t < 1800] = 1 / 1800. * t[t < 1800]
@@ -23,6 +21,11 @@ def zheng_current(beta):
     return current
 
 def constant(crate):
+    """
+    Constant current function for a given time array.
+    :param crate: Current C-rate
+    :return: Current profile function for a given t array sequence.
+    """
     def current(t):
         h = np.ones_like(t.copy(), dtype=np.float32)
         return h * crate
@@ -30,9 +33,8 @@ def constant(crate):
     return current
 
 
+# TODO: Add a UDDS variable profile
 
-
-#  simulation.solve(t_eval, inputs={"Current function [A]": 1.6})
 
 if __name__ == "__main__":
 
