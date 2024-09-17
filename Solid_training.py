@@ -22,52 +22,39 @@ if __name__ == "__main__":
 
     parameters = load_params()
 
-    # training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
     training_points = {"PDE": {"type": "PDE", "N": 1000},
                        "IV": {"type": "IV", "N": 100},
                        "BC_Center": {"type": "BC", "N": 100, "BC_pos": 0.},
                        "BC_Surf": {"type": "BC", "N": 100, "BC_pos": 1.}}
-    # validation_points = {"PDE": 20, "IV": 10, "BC_Center": 10, "BC_Surf": 10}
     validation_points = {"PDE": {"type": "PDE", "N": 30},
                          "IV": {"type": "IV", "N": 15},
                          "BC_Center": {"type": "BC", "N": 15, "BC_pos": 0.},
                          "BC_Surf": {"type": "BC", "N": 15, "BC_pos": 1.}}
 
     pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
-    # pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 10.}
     neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
 
     betas_tr = [0.2, 0.3, 0.5, 0.7, 0.75, 0.8, 0.85, 0.95, 1.]
     betas_val = [0.4, 0.6]
     test_beta = 0.4
 
-    # model = FFNN(layers=[32, 32, 32], input_dim=3, output_dim=1, dropout=0.)
     model = DeepONet(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], dim_branch=360, dim_trunk=3,
                      dim_int=100, dim_out=1, dropout=0.)
-    # model = DeepONet(branch_layers=[32, 32, 32], trunk_layers=[32, 32, 32], dim_branch=360, dim_trunk=3,
-    #                  dim_int=100, dim_out=1, dropout=0.)
-    # model = FFNN_old(3, 1)
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     PINN = Solid_Phase(model, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
 
-    # Sampler_tr = Sampler(training_points)
-    # Sampler_val = Sampler(validation_points)
-    # Sampler_tr = Sampler_DONet(training_points, zheng_current(1.), mode="uniform")
-    # Sampler_val = Sampler_DONet(validation_points, zheng_current(1.), mode="uniform")
-    Sampler_tr = Sampler_DONet(training_points, zheng_current(1.), mode="uniform")
-    Sampler_val = Sampler_DONet(validation_points, zheng_current(1.), mode="uniform")
+    Sampler_tr = Sampler_DONet(training_points, constant(1.), mode="uniform")
+    Sampler_val = Sampler_DONet(validation_points, constant(1.), mode="uniform")
 
     history = {"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
     for j in range(50000 + 1):
 
-        # Sampler_tr.update_current_func(zheng_current(np.random.choice(betas_tr)))
-        Sampler_tr.update_current_func(zheng_current(np.random.choice(betas_tr)))
+        Sampler_tr.update_current_func(constant(np.random.choice(betas_tr)))
         loss_tr, losses_tr = PINN.train_step(optimizer, Sampler_tr)
 
-        # Sampler_val.update_current_func(zheng_current(np.random.choice(betas_val)))
-        Sampler_val.update_current_func(zheng_current(np.random.choice(betas_val)))
+        Sampler_val.update_current_func(constant(np.random.choice(betas_val)))
         loss_val, losses_val = PINN.evaluate(Sampler_val)
 
         if j % 1000 == 0:
@@ -83,10 +70,10 @@ if __name__ == "__main__":
     #
     # for j in range(j_prev, j_prev + 200 + 1):
     #
-    #     Sampler_tr.update_current_func(zheng_current(np.random.choice(betas_tr)))
+    #     Sampler_tr.update_current_func(constant(np.random.choice(betas_tr)))
     #     loss_tr, losses_tr = PINN.train_step(optimizer, Sampler_tr)
     #
-    #     Sampler_val.update_current_func(zheng_current(np.random.choice(betas_val)))
+    #     Sampler_val.update_current_func(constant(np.random.choice(betas_val)))
     #     loss_val, losses_val = PINN.evaluate(Sampler_val)
     #
     #     if j % 10 == 0:
@@ -113,12 +100,10 @@ if __name__ == "__main__":
     plt.show()
 
     # Evaluation
-    # param = pybamm.ParameterValues("ORegan2022")
     param = pybamm.ParameterValues("Chen2020")
 
     t_eval = np.arange(0, 3600)
-    # cur_fun = zheng_current(test_beta)
-    cur_fun = zheng_current(test_beta)
+    cur_fun = constant(test_beta)
 
     current_interpolant = pybamm.Interpolant(t_eval, cur_fun(t_eval) * parameters["I_typ"], pybamm.t)
     param["Current function [A]"] = current_interpolant
@@ -126,9 +111,6 @@ if __name__ == "__main__":
     PBM_model = pybamm.lithium_ion.SPM()
     sim = pybamm.Simulation(PBM_model, parameter_values=param)
     sol = sim.solve(initial_soc=1., t_eval=t_eval)
-
-    # pos_SPM_r0 = sol['X-averaged positive particle concentration'].entries[0, :]
-    # pos_SPM_r1 = sol['X-averaged positive particle concentration'].entries[-1, :]
 
     c_s_n = sol["Negative particle concentration"]
     c_s_p = sol["Positive particle concentration"]
@@ -145,9 +127,6 @@ if __name__ == "__main__":
 
     t_end = t[-1]
     t = np.linspace(0, t_end, num=len(pos_SPM_r1))/3600.
-
-    # cur_fun = zheng_current(test_beta)
-    cur_fun = zheng_current(test_beta)
 
     bcs_sample_t = torch.linspace(0., 1., 1000)
     N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))

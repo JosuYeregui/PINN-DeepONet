@@ -46,6 +46,8 @@ def load_params():
         "SOL_p": [0.9332, 0.252],
         "F": 96485.33212,
         "R": 8.314462,
-        "T": 298.15
+        "T": 298.15,
+        "m_ref_p": 3.42e-6,
+        "m_ref_n": 6.48e-7
     }
     return parameters

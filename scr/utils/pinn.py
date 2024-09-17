@@ -95,6 +95,32 @@ class PINN(nn.Module):
 
         return loss_tr, losses_tr
 
+    def train_step_with_loss(self, optimizer, loss):
+        """
+        Performs one training step with a given loss to the NN and returns the step loss.
+        :param optimizer: PyTorch optimizer
+        :param loss: Sampler object defined in scr/sampling.py
+        :return: Returns the overall loss and component loss after running the forward pass
+        """
+
+        # Set the model in training mode
+        self.model.train()
+        # Zero gradients for every batch
+        optimizer.zero_grad()
+
+        def closure():
+            # Wrapper to avoid issues with the optimizer.step method used with the LBFGS optimizer
+            return loss
+
+        # Adjust learning weights
+        if isinstance(optimizer, torch.optim.LBFGS):
+            # LBFGS requires to perform the step inserting the loss function as argument
+            optimizer.step(closure)
+            self.model.eval()
+        else:
+            # Otherwise the step is performed normally
+            optimizer.step()
+
     def evaluate(self, sampler):
         """
         Performs an evaluation pass to return loss.
@@ -186,3 +212,38 @@ class DeepONet(nn.Module):
         u_pred = torch.sum(out_nn, dim=-1) + self.b
         return u_pred
 
+class NN_TL_Diffusion(nn.Module):
+    """
+    Implements a DeepONet architecture consisting of two sub-networks, one for encoding the input function
+    at a fixed number of sensors (branch net), and another for encoding the locations for the
+    output functions (trunk net), which should be able to learn operators accurately and efficiently from a
+    relatively small dataset
+    """
+
+
+    def __init__(self, general_layers, fine_layers, dim_in,  dim_int, dim_out,
+                 activation=nn.Tanh, dropout=0.2):
+        super(NN_TL_Diffusion, self).__init__()
+
+        # The sub-networks are defined as standard FFNN
+        self.generalize = FFNN(general_layers, dim_in, dim_int, activation=activation, dropout=dropout)
+        self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
+
+
+    def forward(self, x):
+        """
+        Performs a forward pass through the DeepONet architecture.
+        :param x: Input data tensor of shape (batch_size, input_dim)
+        :return: Response tensor of shape (batch_size, output_dim)
+        """
+        # Forward passes the Branch net and Trunk net
+        out_G_preact = self.generalize(x)
+        out_G = self.generalize.activation(out_G_preact)
+        out_F = self.fine(out_G)
+        return out_F
+
+    def freeze_general_model(self):
+        self.generalize.requires_grad_(False)
+
+    def unfreeze_general_model(self):
+        self.generalize.requires_grad_(True)

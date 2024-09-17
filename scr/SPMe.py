@@ -7,6 +7,38 @@ from torch import nn
 import numpy as np
 
 
+class Cell():
+    def __init__(self, pos_model, neg_model, electrolyte=None):
+        self.pos_model = pos_model
+        self.neg_model = neg_model
+        self.electrolyte = electrolyte
+
+    def compute_V(self, samples):
+        I = samples[:, 2]*self.pos_model.params["I_typ"]
+
+        c_pos = self.pos_model(samples)
+        U_0_p, eta_p = self._get_solid_vcomps(c_pos, self.pos_model.params, I, elec="p")
+
+        c_neg = self.neg_model(samples)
+        U_0_n, eta_n = self._get_solid_vcomps(c_neg, self.neg_model.params, -I, elec="n")
+
+        return U_0_p - U_0_n + eta_p - eta_n
+
+    @staticmethod
+    def _get_solid_vcomps(c, parameters, I, elec="p"):
+        OCV = parameters["E_"+elec](c)
+
+        RT_F = parameters["R"] * parameters["T"] / parameters["F"]
+        j = - I / (parameters["L_"+elec] * parameters["as_"+elec] * parameters["A"])
+
+        j0 = parameters["m_ref_"+elec] * 31.62 * parameters["c_"+elec+"_max"] * torch.sqrt(c) * torch.sqrt(1 - c)
+
+        eta = 2 * RT_F * torch.arcsinh(j / (2 * j0))
+
+        return OCV, eta
+
+
+
 class Solid_Phase(PINN):
     """
     PINN for Solid phase of the battery for both negative and positive electrodes.
