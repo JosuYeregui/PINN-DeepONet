@@ -35,6 +35,9 @@ class Cell():
 
         eta = 2 * RT_F * torch.arcsinh(j / (2 * j0))
 
+        if any(eta.isnan()):
+            a = 1
+
         return OCV, eta
 
 
@@ -126,10 +129,11 @@ class Solid_Phase(PINN):
                                    torch.zeros_like(c_bcs)))
 
         # Save individual losses and total loss
-        hist = np.array([l_hist.detach().numpy() for l_hist in loss])
-        loss = torch.sum(torch.stack(loss))
+        # hist = np.array([l_hist.detach().numpy() for l_hist in loss])
+        # losses = loss
+        # loss = torch.sum(torch.stack(loss))
 
-        return loss, hist
+        return torch.sum(torch.stack(loss)), loss
 
     def compute_residuals(self, samples):
         """

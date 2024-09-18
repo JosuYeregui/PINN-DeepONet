@@ -20,7 +20,7 @@ def RMSELoss(yhat, y):
 
 if __name__ == "__main__":
 
-    dr = 0.75
+    dr = 0.9
 
     parameters = load_params()
 
@@ -49,12 +49,12 @@ if __name__ == "__main__":
     PINN.pos_model.load_model("./models/TL_pos.pt")
     PINN.neg_model.load_model("./models/TL_neg.pt")
 
-    PINN.neg_model.model.freeze_general_model()
+    PINN.pos_model.model.freeze_general_model()
 
-    optimizer_n = torch.optim.Adam(PINN.neg_model.parameters(), lr=0.0005)
+    optimizer_n = torch.optim.Adam(PINN.pos_model.parameters(), lr=0.0005)
 
-    PINN.neg_model.params["as_n"] = torch.nn.Parameter(data=torch.tensor(parameters["as_n"]))
-    optimizer_param = torch.optim.Adam([PINN.neg_model.params["as_n"]], lr=0.001*parameters["as_n"])
+    PINN.pos_model.params["as_p"] = torch.nn.Parameter(data=torch.tensor(parameters["as_p"]))
+    optimizer_param = torch.optim.Adam([PINN.pos_model.params["as_p"]], lr=0.001*parameters["as_p"])
     # as_n = torch.nn.Parameter(data=torch.tensor(parameters["as_n"]))
     # optimizer_param = torch.optim.Adam([as_n], lr=1e10)
 
@@ -62,12 +62,12 @@ if __name__ == "__main__":
 
     # PBM
     param = pybamm.ParameterValues("Chen2020")
-    param["Negative electrode active material volume fraction"] *= dr
-    print("Target: ", PINN.neg_model.params["as_n"].detach().numpy() * dr * parameters["R_n"] / 3.)
+    param["Positive electrode active material volume fraction"] *= dr
+    print("Target: ", PINN.pos_model.params["as_p"].detach().numpy() * dr * parameters["R_p"] / 3.)
 
     PBM_model = pybamm.lithium_ion.SPM()
 
-    experiment = pybamm.Experiment(["Discharge at 1C for 100000 seconds or until 2.5 V"])
+    experiment = pybamm.Experiment(["Discharge at 1C for 100000 seconds or until 3 V"])
     sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
     solution = sim.solve(initial_soc=1)
 
@@ -93,7 +93,7 @@ if __name__ == "__main__":
 
         Sampler.update_samples(training_points)
 
-        loss_tot, losses = PINN.neg_model.compute_loss(Sampler)
+        loss_tot, losses = PINN.pos_model.compute_loss(Sampler)
 
         pinn_sample_t = torch.asarray(t_points/3600., dtype=torch.float32).flatten()
         pinn_sample_r = torch.ones_like(pinn_sample_t)
@@ -110,26 +110,31 @@ if __name__ == "__main__":
         optimizer_param.zero_grad()
         loss_n = loss_tot + V_error
         loss_n.backward()
+        # print(PINN.pos_model.model.fine.layers[1].bias.grad)
+        # print(PINN.pos_model.params["as_p"].grad)
+        # print(torch.max(PINN.pos_model(pinn_sample)), torch.sum(loss_tot), V_error, torch.max(PINN.pos_model.model.fine.layers[1].weight.grad))
         optimizer_n.step()
         optimizer_param.step()
 
+        # print(PINN.pos_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3.)
+
         if j % 100 == 0:
             print(j, "\t\t", V_error.detach().numpy(), "\t\t", loss_tot.detach().numpy(), "\t\t",
-                  PINN.neg_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3.)
+                  PINN.pos_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3.)
 
-        eps_n.append(PINN.neg_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3.)
+        eps_n.append(PINN.pos_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3.)
 
     print(time.time() - start)
 
     plt.figure()
     plt.grid()
-    plt.plot(range(1000 + 1), eps_n, "k-", label="eps_n")
-    plt.plot(0, parameters["eps_n"], 'kD', label="Initial")
-    plt.axhline(y=parameters["eps_n"] * dr, color='r', linestyle='--', label="Target")
+    plt.plot(range(1000 + 1), eps_n, "k-", label="eps_p")
+    plt.plot(0, parameters["eps_p"], 'kD', label="Initial")
+    plt.axhline(y=parameters["eps_p"] * dr, color='r', linestyle='--', label="Target")
     plt.legend()
     plt.ylim([0.3, 0.8])
     plt.xlabel("Iteration")
-    plt.ylabel("eps_n")
+    plt.ylabel("eps_p")
     plt.show()
 
     plt.figure()

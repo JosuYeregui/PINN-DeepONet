@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import numpy as np
 
 
 class PINN(nn.Module):
@@ -92,6 +93,7 @@ class PINN(nn.Module):
 
         # Detach the loss values from the computational graph
         loss_tr = loss_tr.detach().numpy()
+        losses_tr = np.array([l_hist.detach().numpy() for l_hist in losses_tr])
 
         return loss_tr, losses_tr
 
@@ -133,6 +135,7 @@ class PINN(nn.Module):
         # Compute the loss
         loss_val, losses_val = self.compute_loss(sampler)
         loss_val = loss_val.detach().numpy()
+        losses_val = np.array([l_hist.detach().numpy() for l_hist in losses_val])
 
         return loss_val, losses_val
 
