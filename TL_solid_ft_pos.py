@@ -20,7 +20,7 @@ def RMSELoss(yhat, y):
 
 if __name__ == "__main__":
 
-    dr = 0.9
+    dr = 0.75
 
     parameters = load_params()
 

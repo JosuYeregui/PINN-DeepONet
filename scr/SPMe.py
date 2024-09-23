@@ -35,9 +35,6 @@ class Cell():
 
         eta = 2 * RT_F * torch.arcsinh(j / (2 * j0))
 
-        if any(eta.isnan()):
-            a = 1
-
         return OCV, eta
 
 
