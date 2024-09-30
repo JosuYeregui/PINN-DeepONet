@@ -27,8 +27,13 @@ class Sampler:
         self.current_func = current_func
 
         for cond in self.points:
-
             self.points[cond][:, 2] = self.current_func(self.points[cond][:, 0] * 3600.)
+
+    def update_t(self, c_rate):
+
+        for cond in self.points:
+
+            self.points[cond][:, 0] *= 1. / (np.max(self.points[cond][:, 0]) * c_rate)
 
     def update_samples(self, point_data):
 

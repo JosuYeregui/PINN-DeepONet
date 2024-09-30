@@ -21,7 +21,7 @@ def RMSELoss(yhat, y):
 if __name__ == "__main__":
 
     dr_p = 0.9
-    dr_n = 1.
+    dr_n = 0.9
 
     parameters = load_params()
 
@@ -34,8 +34,8 @@ if __name__ == "__main__":
                          "BC_Center": {"type": "BC", "N": 15, "BC_pos": 0.},
                          "BC_Surf": {"type": "BC", "N": 15, "BC_pos": 1.}}
 
-    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
-    neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
+    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 10e4}
+    neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 10e4}
 
     model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
                               dim_out=1, dropout=0.)
@@ -47,8 +47,8 @@ if __name__ == "__main__":
 
     PINN = Cell(pos_model, neg_model)
 
-    PINN.pos_model.load_model("./models/TL_pos.pt")
-    PINN.neg_model.load_model("./models/TL_neg.pt")
+    PINN.pos_model.load_model("../models/TL_pos.pt")
+    PINN.neg_model.load_model("../models/TL_neg.pt")
 
     PINN.pos_model.model.freeze_general_model()
     PINN.neg_model.model.freeze_general_model()

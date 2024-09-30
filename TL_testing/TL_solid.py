@@ -8,6 +8,7 @@ import pybamm
 import torch
 import numpy as np
 import pickle
+import time
 
 import matplotlib.pyplot as plt
 
@@ -31,21 +32,23 @@ if __name__ == "__main__":
                          "BC_Center": {"type": "BC", "N": 15, "BC_pos": 0.},
                          "BC_Surf": {"type": "BC", "N": 15, "BC_pos": 1.}}
 
-    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
-    neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e4}
+    pos_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e5}
+    neg_weights = {"PDE": 1e4, "IV": 10., "BC_Center": 1., "BC_Surf": 1e5}
 
     betas_tr = [0.2, 0.3, 0.5, 0.7, 0.75, 0.8, 0.85, 0.95, 1.1]
     betas_val = [0.4, 0.6]
     test_beta = 1.
 
     model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-                            dim_out=1, dropout=0.)
-    optimizer_p = torch.optim.Adam(model_p.parameters(), lr=0.0005)
-    pos_model = Solid_Phase(model_p, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights)
+                              dim_out=1, dropout=0.)
+    pos_model = Solid_Phase(model_p, parameters, criterion=RMSELoss, electrode="pos", weights=pos_weights, adjustable_weights=False)
+    optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
+    optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-                            dim_out=1, dropout=0.)
-    optimizer_n = torch.optim.Adam(model_n.parameters(), lr=0.0005)
-    neg_model = Solid_Phase(model_n, parameters, criterion=RMSELoss, electrode="neg", weights=neg_weights)
+                              dim_out=1, dropout=0.)
+    neg_model = Solid_Phase(model_n, parameters, criterion=RMSELoss, electrode="neg", weights=neg_weights, adjustable_weights=False)
+    optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
+    optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
 
     PINN = Cell(pos_model, neg_model)
 
@@ -58,11 +61,18 @@ if __name__ == "__main__":
                "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(50000 + 1):
+    for j in range(20000 + 1):
+        t = time.time()
+        rate_tr = np.random.choice(betas_tr)
+        rate_val = np.random.choice(betas_val)
 
-        Sampler_tr.update_current_func(constant(np.random.choice(betas_tr)))
+        Sampler_tr.update_current_func(constant(rate_tr))
+        Sampler_tr.update_t(rate_tr)
+        Sampler_val.update_current_func(constant(rate_val))
+        Sampler_val.update_t(rate_val)
 
-        Sampler_val.update_current_func(constant(np.random.choice(betas_val)))
+        optimizer_p_w.zero_grad()
+        optimizer_n_w.zero_grad()
 
         loss_tr, losses_tr = PINN.pos_model.train_step(optimizer_p, Sampler_tr)
         loss_val, losses_val = PINN.pos_model.evaluate(Sampler_val)
@@ -78,19 +88,24 @@ if __name__ == "__main__":
         loss_tr, losses_tr = PINN.neg_model.train_step(optimizer_n, Sampler_tr)
         loss_val, losses_val = PINN.neg_model.evaluate(Sampler_val)
 
+        optimizer_p_w.step()
+        optimizer_n_w.step()
+
         if j % 1000 == 0:
             print(j, "N\t\t", losses_tr, "\t\t", losses_val)
+            print("\t\tWeights\t\tN\t\t", PINN.neg_model.adj_w.detach().numpy(), "\t\tP\t\t", PINN.pos_model.adj_w.detach().numpy())
+            print("\t\tTime per iter: ", (time.time() - t) * 1000, "ms")
             history["negative"]["loss_tr"].append(loss_tr)
             history["negative"]["losses_tr"].append(losses_tr)
             history["negative"]["loss_val"].append(loss_val)
             history["negative"]["losses_val"].append(losses_val)
             history["negative"]["iteration"].append(j)
 
-    PINN.pos_model.save_model("models/TL_pos.pt")
-    PINN.neg_model.save_model("models/TL_neg.pt")
-
-    with open('models/TL.pkl', 'wb') as fp:
-        pickle.dump(history, fp)
+    # PINN.pos_model.save_model("../models/TL_pos_HardIV.pt")
+    # PINN.neg_model.save_model("../models/TL_neg_HardIV.pt")
+    #
+    # with open('../models/TL_HardIV.pkl', 'wb') as fp:
+    #     pickle.dump(history, fp)
 
     t_eval = np.arange(0, 3600)
     cur_fun = constant(test_beta)
@@ -116,9 +131,21 @@ if __name__ == "__main__":
 
     plt.figure()
     plt.grid()
-    plt.plot(t / 3600. * 5., V, "k-")
-    plt.plot(bcs_sample_t * 5., V_pinn, "r-")
+    plt.plot(t / 3600. * 5., V, "k-", label="PyBaMM")
+    plt.plot(bcs_sample_t * 5., V_pinn, "r-", label="PINN")
     plt.ylim([2.5, 4.3])
     plt.xlabel("Disch. Capacity [Ah]")
     plt.ylabel("V [V]")
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.grid()
+    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_tr"], '--r', label="+ Training")
+    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_val"], '-r', label="+ Validation")
+    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_tr"], '--b', label="- Training")
+    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_val"], '-b', label="- Validation")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.legend()
     plt.show()

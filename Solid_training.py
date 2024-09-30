@@ -91,7 +91,7 @@ if __name__ == "__main__":
 
     # Plot
     plt.figure()
-    plt.grid("on")
+    plt.grid()
     plt.semilogy(history["iteration"], history["loss_tr"], label="Training")
     plt.semilogy(history["iteration"], history["loss_val"], label="Validation")
     plt.xlabel("Epoch")

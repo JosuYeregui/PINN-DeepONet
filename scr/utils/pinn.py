@@ -26,19 +26,12 @@ class PINN(nn.Module):
         """
         return self.model(x).flatten()
 
-    def update_model(self, model):
-        """
-        Updates the NN architecture according to a precomputed model.
-        :param model: Input model substituting the contained one
-        """
-        self.model = model
-
     def save_model(self, PATH):
         """
         Saves the pytorch model as .tp file with
         :param PATH: Local path to save the model
         """
-        torch.save(self.model, PATH)
+        torch.save(self.state_dict(), PATH)
 
     def load_model(self, PATH):
         """
@@ -46,7 +39,7 @@ class PINN(nn.Module):
         :param PATH: Local path where model is stored
         """
         try:
-            self.model = torch.load(PATH)
+            self.load_state_dict(torch.load(PATH, weights_only=True))
             self.model.eval()
         except:
             print("Could not load the model from " + PATH + "!")

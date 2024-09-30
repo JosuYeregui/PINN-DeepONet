@@ -44,7 +44,7 @@ class Solid_Phase(PINN):
     PINN for Solid phase of the battery for both negative and positive electrodes.
     """
     def __init__(self, model, parameters, criterion=nn.MSELoss(), c_rate=1.,
-                 electrode="pos", weights=None):
+                 electrode="pos", weights=None, adjustable_weights=False):
         super().__init__(model, criterion)
 
         self.params = parameters
@@ -54,8 +54,12 @@ class Solid_Phase(PINN):
 
         # The loss function has weighted terms, received as input or not scaled
         self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
-        if weights is not None:
+        if weights is not None and not adjustable_weights:
             self.weights = weights
+
+        self.adjustable_weights = adjustable_weights
+
+        self.adj_w = nn.Parameter(data=torch.Tensor([1, 1, 1]), requires_grad=adjustable_weights)
 
         # There are certain differences between the positive and negative domain solid equations,
         # mainly in flux direction
@@ -95,12 +99,12 @@ class Solid_Phase(PINN):
         loss.append(self.weights["PDE"] * self.criterion(self._pde(x_pde, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        # Initial Value loss
-        iv_sample = sampler.sample("IV")
-        c_iv = self(iv_sample)
-
-        loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
-                                                        torch.zeros_like(c_iv)))
+        # # Initial Value loss
+        # iv_sample = sampler.sample("IV")
+        # c_iv = self(iv_sample)
+        #
+        # loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv, self.params["SOC_0"]),
+        #                                                 torch.zeros_like(c_iv)))
 
         # Boundary Condition (Centre) loss
         bcc_sample = sampler.sample("BC_Center")
@@ -129,6 +133,11 @@ class Solid_Phase(PINN):
         # hist = np.array([l_hist.detach().numpy() for l_hist in loss])
         # losses = loss
         # loss = torch.sum(torch.stack(loss))
+
+        if self.adjustable_weights:
+            loss = [l * 1/(2*torch.pow(a, 2)) + torch.log(1 + torch.pow(a, 2)) for l, a in zip(loss, self.adj_w)]
+
+            # loss = loss * 1 / (2 * torch.pow(self.adj_w, 2)) + torch.log(1 + torch.pow(self.adj_w, 2))
 
         return torch.sum(torch.stack(loss)), loss
 
@@ -214,7 +223,7 @@ class Solid_Phase(PINN):
 
         # A regularization is added for the initial t points of the equations where the derivatives are more agressive
         def regularization(t):
-            return 0.5 * (1 + torch.tanh((t - self.tc*0.01/self.tc) / (self.tc*0.01/self.tc)))
+            return 1. #  0.5 * (1 + torch.tanh((t - self.tc*0.01/self.tc) / (self.tc*0.01/self.tc)))
 
         N = (dcdr[:, 1] * self.params["D_"+self.el_name] * self.params["c_"+self.el_name+"_max"] /
              self.params["R_"+self.el_name])
@@ -235,6 +244,18 @@ class Solid_Phase(PINN):
         """
         return c0 - (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
                                                              self.params["SOL_"+self.el_name][0]) * soc))
+
+    def forward(self, x):
+        """
+        Performs the forward pass to a given input data.
+        :param x: Input tensor (or tuple in case of DeepONet), containing the spatial and condition information
+        :return: Model response to input data
+        """
+        u = self.model(x)
+        u = x[:, 0] * u.flatten() + (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
+                                                             self.params["SOL_"+self.el_name][0]) *
+                                                                  self.params["SOC_0"]))
+        return u
 
 
 class Electrolyte(PINN):
