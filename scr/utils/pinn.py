@@ -60,35 +60,13 @@ class PINN(nn.Module):
         # Zero gradients for every batch
         optimizer.zero_grad()
 
-        def get_loss():
-            # Forward pass to compute the loss
-
-            # Compute the loss and its gradients
-            loss, losses = self.compute_loss(sampler)
-            loss.backward()
-            return loss, losses
-
-        def closure():
-            # Wrapper to avoid issues with the optimizer.step method used with the LBFGS optimizer
-            loss, _ = get_loss()
-            return loss
-
-        # Adjust learning weights
-        if isinstance(optimizer, torch.optim.LBFGS):
-            # LBFGS requires to perform the step inserting the loss function as argument
-            optimizer.step(closure)
-            self.model.eval()
-            loss_tr, losses_tr = get_loss()
-        else:
-            # Otherwise the step is performed normally
-            loss_tr, losses_tr = get_loss()
-            optimizer.step()
+        losses = self.compute_loss(sampler)
+        optimizer.step(losses)
 
         # Detach the loss values from the computational graph
-        loss_tr = loss_tr.detach().numpy()
-        losses_tr = np.array([l_hist.detach().numpy() for l_hist in losses_tr])
+        losses_tr = np.array([l_hist.detach().numpy() for l_hist in losses])
 
-        return loss_tr, losses_tr
+        return losses_tr
 
     def train_step_with_loss(self, optimizer, loss):
         """
@@ -116,7 +94,7 @@ class PINN(nn.Module):
             # Otherwise the step is performed normally
             optimizer.step()
 
-    def evaluate(self, sampler):
+    def evalueate_old(self, sampler):
         """
         Performs an evaluation pass to return loss.
         :param sampler: Sampler object defined in scr/sampling.py
@@ -131,6 +109,21 @@ class PINN(nn.Module):
         losses_val = np.array([l_hist.detach().numpy() for l_hist in losses_val])
 
         return loss_val, losses_val
+
+    def evaluate(self, sampler):
+        """
+        Performs an evaluation pass to return loss.
+        :param sampler: Sampler object defined in scr/sampling.py
+        :return: Returns the overall loss and component loss after running the forward pass
+        """
+
+        # Set the model in evaluation mode
+        self.model.eval()
+        # Compute the loss
+        losses_val = self.compute_loss(sampler)
+        losses_val = np.array([l_hist.detach().numpy() for l_hist in losses_val])
+
+        return losses_val
 
     @staticmethod
     def _init_weights(m):

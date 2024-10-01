@@ -43,7 +43,7 @@ class Solid_Phase(PINN):
     """
     PINN for Solid phase of the battery for both negative and positive electrodes.
     """
-    def __init__(self, model, parameters, criterion=nn.MSELoss(), c_rate=1.,
+    def __init__(self, model, parameters, weigths, criterion=nn.MSELoss(), c_rate=1.,
                  electrode="pos", weights=None, adjustable_weights=False):
         super().__init__(model, criterion)
 
@@ -53,13 +53,14 @@ class Solid_Phase(PINN):
         self.tc = (1./c_rate)*3600.
 
         # The loss function has weighted terms, received as input or not scaled
-        self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
-        if weights is not None and not adjustable_weights:
-            self.weights = weights
-
-        self.adjustable_weights = adjustable_weights
-
-        self.adj_w = nn.Parameter(data=torch.Tensor([1, 1, 1]), requires_grad=adjustable_weights)
+        # self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
+        # if weights is not None and not adjustable_weights:
+        #     self.weights = weights
+        #
+        # self.adjustable_weights = adjustable_weights
+        #
+        # self.adj_w = nn.Parameter(data=torch.Tensor([1, 1, 1]), requires_grad=adjustable_weights)
+        self.weigths = weigths
 
         # There are certain differences between the positive and negative domain solid equations,
         # mainly in flux direction
@@ -96,7 +97,7 @@ class Solid_Phase(PINN):
             x_pde = pde_sample
         c_pde = self(pde_sample)
 
-        loss.append(self.weights["PDE"] * self.criterion(self._pde(x_pde, c_pde),
+        loss.append(self.criterion(self._pde(x_pde, c_pde),
                                                          torch.zeros_like(c_pde)))
 
         # # Initial Value loss
@@ -114,7 +115,7 @@ class Solid_Phase(PINN):
             x_bcc = bcc_sample
         c_bcc = self(bcc_sample)
 
-        loss.append(self.weights["BC_Center"] * self.criterion(self._bc_centre(x_bcc, c_bcc),
+        loss.append(self.criterion(self._bc_centre(x_bcc, c_bcc),
                                                                torch.zeros_like(c_bcc)))
 
         # Boundary Condition (Surface) loss
@@ -125,7 +126,7 @@ class Solid_Phase(PINN):
             x_bcs = bcs_sample
         c_bcs = self(bcs_sample)
 
-        loss.append(self.weights["BC_Surf"] *
+        loss.append(
                     self.criterion(self._bc_surf(x_bcs, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
@@ -134,12 +135,13 @@ class Solid_Phase(PINN):
         # losses = loss
         # loss = torch.sum(torch.stack(loss))
 
-        if self.adjustable_weights:
-            loss = [l * 1/(2*torch.pow(a, 2)) + torch.log(1 + torch.pow(a, 2)) for l, a in zip(loss, self.adj_w)]
+        # if self.adjustable_weights:
+        #     loss = [l * 1/(2*torch.pow(a, 2)) + torch.log(1 + torch.pow(a, 2)) for l, a in zip(loss, self.adj_w)]
 
             # loss = loss * 1 / (2 * torch.pow(self.adj_w, 2)) + torch.log(1 + torch.pow(self.adj_w, 2))
 
-        return torch.sum(torch.stack(loss)), loss
+        return torch.stack(loss)
+        # return torch.sum(torch.stack(loss)), loss
 
     def compute_residuals(self, samples):
         """
