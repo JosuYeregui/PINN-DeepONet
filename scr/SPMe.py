@@ -130,16 +130,6 @@ class Solid_Phase(PINN):
                     self.criterion(self._bc_surf(x_bcs, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
-        # Save individual losses and total loss
-        # hist = np.array([l_hist.detach().numpy() for l_hist in loss])
-        # losses = loss
-        # loss = torch.sum(torch.stack(loss))
-
-        # if self.adjustable_weights:
-        #     loss = [l * 1/(2*torch.pow(a, 2)) + torch.log(1 + torch.pow(a, 2)) for l, a in zip(loss, self.adj_w)]
-
-            # loss = loss * 1 / (2 * torch.pow(self.adj_w, 2)) + torch.log(1 + torch.pow(self.adj_w, 2))
-
         return torch.stack(loss)
         # return torch.sum(torch.stack(loss)), loss
 
@@ -262,64 +252,58 @@ class Solid_Phase(PINN):
 
 class Electrolyte(PINN):
 
-    def __init__(self, model, parameters, criterion=nn.MSELoss(), c_rate=1., weights=None):
+    def __init__(self, model, parameters, weights, criterion=nn.MSELoss(), c_rate=1.):
         super().__init__(model, criterion)
 
         self.params = parameters
 
-        self.C_rate = c_rate
-        self.tc = (1./c_rate)*3600.
+        # For scaling purposes a characteristic time is specified
+        self.tc = (1. / c_rate) * 3600.
 
-        self.weights = {"PDE": 1., "IV": 1., "BC_Left": 1., "BC_Right": 1.}
-        if weights is not None:
-            self.weights = weights
+        self.weights = weights
 
-    def update_crate(self, c_rate):
-        self.C_rate = c_rate
+    def update_tc(self, c_rate):
+        """
+        Updates the current characteristic time
+        :param c_rate: New C-rate to base the time on
+        """
         self.tc = (1. / c_rate) * 3600.
 
     def compute_loss(self, sampler):
 
         loss = []
 
-        i_app = self.C_rate * self.params["I_typ"] / self.params["A"]
-
-        pde_sample = sampler.sample("PDE", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        pde_sample = sampler.sample("PDE")
         c_pde = self(pde_sample)
 
-        loss.append(self.weights["PDE"] * self.criterion(self._pde(pde_sample, c_pde, i_app),
+        loss.append(self.criterion(self._pde(pde_sample, c_pde),
                                                          torch.zeros_like(c_pde)))
 
-        iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
-        c_iv = self(iv_sample)
+        # iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        # c_iv = self(iv_sample)
+        #
+        # loss.append(self.criterion(self._iv(c_iv), torch.zeros_like(c_iv)))
 
-        loss.append(self.weights["IV"] * self.criterion(self._iv(c_iv), torch.zeros_like(c_iv)))
-
-        bcc_sample = sampler.sample("BC_Left", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        bcc_sample = sampler.sample("BC_Left")
         c_bcc = self(bcc_sample)
 
-        loss.append(self.weights["BC_Left"] * self.criterion(self._bc(bcc_sample, c_bcc),
+        loss.append(self.criterion(self._bc(bcc_sample, c_bcc),
                                                              torch.zeros_like(c_bcc)))
 
-        bcs_sample = sampler.sample("BC_Right", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
+        bcs_sample = sampler.sample("BC_Right")
         c_bcs = self(bcs_sample)
 
-        loss.append(self.weights["BC_Right"] *
-                    self.criterion(self._bc(bcs_sample, c_bcs),
+        loss.append(self.criterion(self._bc(bcs_sample, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
-        hist = np.array([l_hist.detach().numpy() for l_hist in loss])
+        return torch.stack(loss)
 
-        loss = torch.sum(torch.stack(loss))
-
-        return loss, hist
-
-    def compute_residuals(self, samples, i_app):
+    def compute_residuals(self, samples):
 
         self.model.eval()
         #
         c_pde = self(samples)
-        residuals = self._pde(samples, c_pde, i_app)
+        residuals = self._pde(samples, c_pde)
 
         return residuals
 
@@ -360,34 +344,8 @@ class Electrolyte(PINN):
 
         return left - right
 
-    def _pde_Iker(self, x, c, i_app):
-        dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
-                                   create_graph=True)[0]
-
-        L_n = self.params["L_n"] / self.params["L"]
-        L_s = self.params["L_s"] / self.params["L"]
-
-        idx_Ln = x[:, 1] < L_n
-        idx_Lp = x[:, 1] > L_n + L_s
-        idx_Ls = (L_n <= x[:, 1]) & (x[:, 1] <= L_n + L_s)
-
-        left = dcdx[:, 0] * self.params["ce0"] / self.tc  # * self.params["por_n"]
-        left[idx_Ln] *= self.params["por_n"]
-        left[idx_Ls] *= self.params["por_s"]
-        left[idx_Lp] *= self.params["por_p"]
-
-        dNdx = dcdx[:, 1] * self.params["D_e"](c) * self.params["ce0"] / self.params["L"]
-        dNdx[idx_Ln] *= self.params["por_n"] ** self.params["brug"]
-        dNdx[idx_Ls] *= self.params["por_s"] ** self.params["brug"]
-        dNdx[idx_Lp] *= self.params["por_p"] ** self.params["brug"]
-        right = torch.autograd.grad(dNdx, x, grad_outputs=torch.ones_like(dNdx),
-                                    create_graph=True)[0][:, 1] / self.params["L"]
-        right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
-        right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
-
-        return left - right
-
-    def _pde(self, x, c, i_app):
+    def _pde(self, x, c):
+        i_app = x[:, 2] * self.params["I_typ"] / self.params["A"]
 
         dcdx = torch.autograd.grad(c, x, grad_outputs=torch.ones_like(c),
                                    create_graph=True)[0]
@@ -404,17 +362,18 @@ class Electrolyte(PINN):
         left[idx_Ls] *= self.params["por_s"]
         left[idx_Lp] *= self.params["por_p"]
 
-        right = torch.autograd.grad(dcdx[:, 1], x, grad_outputs=torch.ones_like(dcdx[:, 1]),
-                                    create_graph=True)[0][:, 1]
-        De_eff = torch.ones_like(right) * self.params["D_e_const"]
+        De_eff = torch.ones_like(c) * self.params["D_e_const"]
+        # De_eff = self.params["D_e"](c)
         De_eff[idx_Ln] *= self.params["por_n"] ** self.params["brug"]
         De_eff[idx_Ls] *= self.params["por_s"] ** self.params["brug"]
         De_eff[idx_Lp] *= self.params["por_p"] ** self.params["brug"]
+        right = torch.autograd.grad(De_eff * dcdx[:, 1], x, grad_outputs=torch.ones_like(dcdx[:, 1]),
+                                    create_graph=True)[0][:, 1]
 
-        right *= De_eff * self.params["ce0"] / self.params["L"] ** 2
+        right *= self.params["ce0"] / self.params["L"] ** 2
 
-        right[idx_Ln] += i_app / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
-        right[idx_Lp] -= i_app / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
+        right[idx_Ln] += i_app[idx_Ln] / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
+        right[idx_Lp] -= i_app[idx_Lp] / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
 
         return left - right
 
@@ -452,3 +411,13 @@ class Electrolyte(PINN):
         term_2[idx_Lp] *= (1 - x[idx_Lp, 1]) / L_p
 
         return term_1 + term_2
+
+    def forward(self, x):
+        """
+        Performs the forward pass to a given input data.
+        :param x: Input tensor (or tuple in case of DeepONet), containing the spatial and condition information
+        :return: Model response to input data
+        """
+        u = self.model(x)
+        u = x[:, 0] * u.flatten() + 1.
+        return u

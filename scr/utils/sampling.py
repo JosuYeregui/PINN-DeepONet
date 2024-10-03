@@ -7,14 +7,14 @@ class Sampler:
     """
     Sampler to feed the NN following the PINN needs
     """
-    def __init__(self, init_point_data, current_func, mode="pseudo"):
+    def __init__(self, init_point_data, current_func, t_max=1., mode="pseudo"):
 
         self.points = dict()
         self.points_tch = dict()
         self.mode = mode
         self.current_func = current_func
 
-        self.update_samples(init_point_data)
+        self.update_samples(init_point_data, current_func, t_max)
 
     def sample(self, cond):
         return torch.tensor(self.points[cond], requires_grad=True)
@@ -32,10 +32,10 @@ class Sampler:
     def update_t(self, c_rate):
 
         for cond in self.points:
+            if cond != "IV":
+                self.points[cond][:, 0] *= 1. / (np.max(self.points[cond][:, 0]) * c_rate)
 
-            self.points[cond][:, 0] *= 1. / (np.max(self.points[cond][:, 0]) * c_rate)
-
-    def update_samples(self, point_data):
+    def update_samples(self, point_data, current_func, t_max):
 
         for cond in point_data:
             if point_data[cond]["type"] == "IV":
@@ -47,8 +47,12 @@ class Sampler:
             else:
                 raise NotImplementedError("The sampling type does not exist")
 
+            points[:, 0] *= t_max
+            self.current_func = current_func
+
             cur = self.current_func(points[:, 0] * 3600.)
             points = np.concatenate([points, cur.reshape((-1, 1))], axis=1)
+
             self.points[cond] = points
             self.points_tch[cond] = self._cast_torch(points)
 

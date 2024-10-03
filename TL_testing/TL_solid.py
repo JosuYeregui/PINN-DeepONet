@@ -43,13 +43,13 @@ if __name__ == "__main__":
     model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
                               dim_out=1, dropout=0.)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos", weights=pos_weights, adjustable_weights=False)
-    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths)
+    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
                               dim_out=1, dropout=0.)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg", weights=neg_weights, adjustable_weights=False)
-    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths)
+    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
 
     # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
     # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
@@ -58,22 +58,25 @@ if __name__ == "__main__":
 
     # PINN.neg_model.params["as_n"] = torch.nn.Parameter(torch.tensor([parameters["as_n"]]), requires_grad=False)
 
-    Sampler_tr = Sampler(training_points, constant(1.), mode="uniform")
-    Sampler_val = Sampler(validation_points, constant(1.), mode="uniform")
+    Sampler_tr = Sampler(training_points, constant(1.), mode="quasi")
+    Sampler_val = Sampler(validation_points, constant(1.), mode="quasi")
 
     history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []},
                "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(20000 + 1):
+    for j in range(50000 + 1):
         t = time.time()
         rate_tr = np.random.choice(betas_tr)
         rate_val = np.random.choice(betas_val)
 
-        Sampler_tr.update_current_func(constant(rate_tr))
-        Sampler_tr.update_t(rate_tr)
-        Sampler_val.update_current_func(constant(rate_val))
-        Sampler_val.update_t(rate_val)
+        # Sampler_tr.update_current_func(constant(rate_tr))
+        # Sampler_tr.update_t(rate_tr)
+        # Sampler_val.update_current_func(constant(rate_val))
+        # Sampler_val.update_t(rate_val)
+
+        Sampler_tr.update_samples(training_points, constant(rate_tr), 1. / rate_tr)
+        Sampler_val.update_samples(validation_points, constant(rate_val), 1. / rate_val)
 
         # optimizer_p_w.zero_grad()
         # optimizer_n_w.zero_grad()

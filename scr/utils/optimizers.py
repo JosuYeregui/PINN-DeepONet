@@ -21,7 +21,7 @@ class NTK_Adaptive(Optimizer):
             loss = torch.sum(losses * torch.tensor(self.weights))
             return loss.backward()
 
-        if self.iter % 1 == 0:
+        if self.iter % 10 == 0:
 
             grads = []
             for loss in losses:
