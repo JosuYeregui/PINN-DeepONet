@@ -6,19 +6,20 @@ import numpy as np
 
 class NTK_Adaptive(Optimizer):
 
-    def __init__(self, params, weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, alpha=0.9):
+    def __init__(self, params, weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, alpha=0.9, device="cpu"):
         self.params = list(params)
         self.weights = weights
         self.adam = torch.optim.Adam(self.params, **adam_param)
         self.alpha = alpha
         self.iter = 0
+        self.device = device
 
         super().__init__(self.params, defaults={})
 
     def step(self, losses):
         self.iter += 1
         def closure():
-            loss = torch.sum(losses * torch.tensor(self.weights))
+            loss = torch.sum(losses * torch.tensor(self.weights).to(self.device))
             return loss.backward()
 
         if self.iter % 10 == 0:

@@ -7,17 +7,18 @@ class Sampler:
     """
     Sampler to feed the NN following the PINN needs
     """
-    def __init__(self, init_point_data, current_func, t_max=1., mode="pseudo"):
+    def __init__(self, init_point_data, current_func, t_max=1., mode="pseudo", device="cpu"):
 
         self.points = dict()
         self.points_tch = dict()
         self.mode = mode
         self.current_func = current_func
+        self.device=device
 
         self.update_samples(init_point_data, current_func, t_max)
 
     def sample(self, cond):
-        return torch.tensor(self.points[cond], requires_grad=True)
+        return torch.tensor(self.points[cond], requires_grad=True).to(self.device)
 
     def get_points(self, cond):
         return self.points_tch[cond]
@@ -119,9 +120,8 @@ class Sampler:
         space = [(0.0, 1.0)] * dimension
         return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
 
-    @staticmethod
-    def _cast_torch(array):
-        return torch.tensor(array, requires_grad=True)
+    def _cast_torch(self, array):
+        return torch.tensor(array, requires_grad=True).to(self.device)
 
 
 class Sampler_DONet(Sampler):
@@ -129,8 +129,8 @@ class Sampler_DONet(Sampler):
     Sampler compatible with the DeepONet architecture. The data needed for the network differs as the input to the
     DeepONet requires a separated input of the sensors (input current) to the branch net.
     """
-    def __init__(self, init_point_data, current_func, mode="pseudo"):
-        super(Sampler_DONet, self).__init__(init_point_data, current_func, mode)
+    def __init__(self, init_point_data, current_func, t_max=1., mode="pseudo", device="cpu"):
+        super(Sampler_DONet, self).__init__(init_point_data, current_func, t_max, mode, device)
 
         self.t = np.arange(0, 3600, 10, dtype=np.float32)
         self.N = current_func(self.t)

@@ -64,7 +64,7 @@ class PINN(nn.Module):
         optimizer.step(losses)
 
         # Detach the loss values from the computational graph
-        losses_tr = np.array([l_hist.detach().numpy() for l_hist in losses])
+        losses_tr = np.array([l_hist.cpu().detach().numpy() for l_hist in losses])
 
         return losses_tr
 
@@ -121,7 +121,7 @@ class PINN(nn.Module):
         self.model.eval()
         # Compute the loss
         losses_val = self.compute_loss(sampler)
-        losses_val = np.array([l_hist.detach().numpy() for l_hist in losses_val])
+        losses_val = np.array([l_hist.cpu().detach().numpy() for l_hist in losses_val])
 
         return losses_val
 

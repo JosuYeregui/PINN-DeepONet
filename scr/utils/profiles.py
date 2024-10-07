@@ -1,6 +1,7 @@
 import torch
 import pybamm
 import numpy as np
+from sklearn import gaussian_process as gp
 
 import matplotlib.pyplot as plt
 
@@ -31,6 +32,22 @@ def constant(crate):
         return h * crate
 
     return current
+
+def grf(T, N, length_scale=1):
+    """
+    Gaussian random field for a given temperature profile.
+    :param T: Temperature profile
+    :return: Gaussian random field
+    """
+    x = np.linspace(0, T, num=N)[:, None]
+    K = gp.kernels.RBF(length_scale=length_scale)
+    K = K(x)
+    L = np.linalg.cholesky(K + 1e-13 * np.eye(N))
+    def current(t):
+        return np.dot(L, t*T).T
+
+    return current
+
 
 
 # TODO: Add a UDDS variable profile

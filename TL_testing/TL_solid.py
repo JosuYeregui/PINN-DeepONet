@@ -14,6 +14,8 @@ import time
 import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
+device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+print(device)
 
 
 def RMSELoss(yhat, y):
@@ -41,15 +43,15 @@ if __name__ == "__main__":
     test_beta = 1.
 
     model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-                              dim_out=1, dropout=0.)
-    pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos", weights=pos_weights, adjustable_weights=False)
-    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
+                              dim_out=1, dropout=0.).to(device)
+    pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos", weights=pos_weights, adjustable_weights=False).to(device)
+    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, device=device)
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-                              dim_out=1, dropout=0.)
-    neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg", weights=neg_weights, adjustable_weights=False)
-    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
+                              dim_out=1, dropout=0.).to(device)
+    neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg", weights=neg_weights, adjustable_weights=False).to(device)
+    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, device=device)
 
     # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
     # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
@@ -58,8 +60,8 @@ if __name__ == "__main__":
 
     # PINN.neg_model.params["as_n"] = torch.nn.Parameter(torch.tensor([parameters["as_n"]]), requires_grad=False)
 
-    Sampler_tr = Sampler(training_points, constant(1.), mode="quasi")
-    Sampler_val = Sampler(validation_points, constant(1.), mode="quasi")
+    Sampler_tr = Sampler(training_points, constant(1.), mode="quasi", device=device)
+    Sampler_val = Sampler(validation_points, constant(1.), mode="quasi", device=device)
 
     history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []},
                "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
@@ -69,14 +71,27 @@ if __name__ == "__main__":
         t = time.time()
         rate_tr = np.random.choice(betas_tr)
         rate_val = np.random.choice(betas_val)
+        # rate_tr *= -1
+        # rate_val *= -1
+        # PINN.neg_model.params["SOC_0"] = 0.
+        # PINN.pos_model.params["SOC_0"] = 0.
+
+        if np.random.rand() < 0.5:
+            rate_tr *= -1
+            rate_val *= -1
+            PINN.neg_model.params["SOC_0"] = 0.
+            PINN.pos_model.params["SOC_0"] = 0.
+        else:
+            PINN.neg_model.params["SOC_0"] = 1.
+            PINN.pos_model.params["SOC_0"] = 1.
 
         # Sampler_tr.update_current_func(constant(rate_tr))
         # Sampler_tr.update_t(rate_tr)
         # Sampler_val.update_current_func(constant(rate_val))
         # Sampler_val.update_t(rate_val)
 
-        Sampler_tr.update_samples(training_points, constant(rate_tr), 1. / rate_tr)
-        Sampler_val.update_samples(validation_points, constant(rate_val), 1. / rate_val)
+        Sampler_tr.update_samples(training_points, constant(rate_tr), 1. / np.abs(rate_tr))
+        Sampler_val.update_samples(validation_points, constant(rate_val), 1. / np.abs(rate_val))
 
         # optimizer_p_w.zero_grad()
         # optimizer_n_w.zero_grad()
@@ -108,11 +123,22 @@ if __name__ == "__main__":
             history["negative"]["losses_val"].append(losses_val)
             history["negative"]["iteration"].append(j)
 
-    # PINN.pos_model.save_model("../models/TL_pos_HardIV.pt")
-    # PINN.neg_model.save_model("../models/TL_neg_HardIV.pt")
-    #
-    # with open('../models/TL_HardIV.pkl', 'wb') as fp:
-    #     pickle.dump(history, fp)
+    PINN.pos_model.save_model("../models/TL_pos_v2.pt")
+    PINN.neg_model.save_model("../models/TL_neg_v2.pt")
+
+    with open('../models/TL_v2.pkl', 'wb') as fp:
+        pickle.dump(history, fp)
+
+    plt.figure()
+    plt.grid()
+    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_tr"], '--r', label="+ Training")
+    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_val"], '-r', label="+ Validation")
+    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_tr"], '--b', label="- Training")
+    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_val"], '-b', label="- Validation")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE Loss")
+    plt.legend()
+    plt.show()
 
     t_eval = np.arange(0, 3600)
     cur_fun = constant(test_beta)
@@ -121,9 +147,10 @@ if __name__ == "__main__":
     bcs_sample_r = torch.ones_like(bcs_sample_t)
     bcs_sample_I = torch.tensor(cur_fun(bcs_sample_t.numpy() * 3600.))
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
+    PINN.neg_model.params["SOC_0"] = 1.
+    PINN.pos_model.params["SOC_0"] = 1.
 
     V_pinn = PINN.compute_V(bcs_sample).detach().numpy()
-
 
     param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
@@ -146,13 +173,36 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
+
+
+    cur_fun = constant(-test_beta)
+
+    bcs_sample_t = torch.linspace(0., 1., 1000)
+    bcs_sample_r = torch.ones_like(bcs_sample_t)
+    bcs_sample_I = torch.tensor(cur_fun(bcs_sample_t.numpy() * 3600.))
+    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
+    PINN.neg_model.params["SOC_0"] = 0.
+    PINN.pos_model.params["SOC_0"] = 0.
+
+    V_pinn = PINN.compute_V(bcs_sample).detach().numpy()
+
+    param = pybamm.ParameterValues("Chen2020")
+    PBM_model = pybamm.lithium_ion.SPM()
+
+    experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])
+    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
+    solution = sim.solve(initial_soc=0)
+
+    t = solution["Time [s]"].entries
+
+    V = solution["Terminal voltage [V]"].entries
+
     plt.figure()
     plt.grid()
-    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_tr"], '--r', label="+ Training")
-    plt.semilogy(history["positive"]["iteration"], history["positive"]["loss_val"], '-r', label="+ Validation")
-    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_tr"], '--b', label="- Training")
-    plt.semilogy(history["negative"]["iteration"], history["negative"]["loss_val"], '-b', label="- Validation")
-    plt.xlabel("Epoch")
-    plt.ylabel("MSE Loss")
+    plt.plot(t / 3600. * 5., V, "k-", label="PyBaMM")
+    plt.plot(bcs_sample_t * 5., V_pinn, "r-", label="PINN")
+    plt.ylim([2.5, 4.3])
+    plt.xlabel("Chg. Capacity [Ah]")
+    plt.ylabel("V [V]")
     plt.legend()
     plt.show()
