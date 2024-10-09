@@ -14,7 +14,10 @@ class Cell():
         self.electrolyte = electrolyte
 
     def compute_V(self, samples):
-        I = samples[:, 2]*self.pos_model.params["I_typ"]
+        if isinstance(samples, tuple):
+            I = samples[0][:, 2] * self.pos_model.params["I_typ"]
+        else:
+            I = samples[:, 2]*self.pos_model.params["I_typ"]
 
         c_pos = self.pos_model(samples)
         U_0_p, eta_p = self._get_solid_vcomps(c_pos, self.pos_model.params, I, elec="p")
@@ -44,7 +47,7 @@ class Solid_Phase(PINN):
     PINN for Solid phase of the battery for both negative and positive electrodes.
     """
     def __init__(self, model, parameters, weigths, criterion=nn.MSELoss(), c_rate=1.,
-                 electrode="pos", weights=None, adjustable_weights=False):
+                 electrode="pos"):
         super().__init__(model, criterion)
 
         self.params = parameters
@@ -244,6 +247,8 @@ class Solid_Phase(PINN):
         :return: Model response to input data
         """
         u = self.model(x)
+        if isinstance(x, tuple):
+            x = x[0]   # In case of DeepONet the input is a tuple with (x, N)
         u = x[:, 0] * u.flatten() + (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
                                                              self.params["SOL_"+self.el_name][0]) *
                                                                   self.params["SOC_0"]))

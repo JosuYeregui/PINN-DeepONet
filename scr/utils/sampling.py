@@ -149,3 +149,7 @@ class Sampler_DONet(Sampler):
 
         self.N = current_func(self.t)
         self.N_tch = self._cast_torch(self.N)
+
+    def update_N(self, current_func):
+        self.N = current_func(self.t)
+        self.N_tch = self._cast_torch(self.N)

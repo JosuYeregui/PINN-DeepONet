@@ -1,6 +1,8 @@
 import torch
 from torch import nn
 import numpy as np
+import os
+from datetime import datetime
 
 
 class PINN(nn.Module):
@@ -31,6 +33,20 @@ class PINN(nn.Module):
         Saves the pytorch model as .tp file with
         :param PATH: Local path to save the model
         """
+        # Check if the file already exists
+        if os.path.exists(PATH):
+            # Split the path into directory, filename, and extension
+            directory, filename = os.path.split(PATH)
+            name, ext = os.path.splitext(filename)
+
+            # Create a new filename with a timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            new_filename = f"{name}_{timestamp}{ext}"
+            new_PATH = os.path.join(directory, new_filename)
+
+            PATH = new_PATH  # Update the PATH to the new filename
+
+        # Save the model
         torch.save(self.state_dict(), PATH)
 
     def load_model(self, PATH):
@@ -193,7 +209,7 @@ class DeepONet(nn.Module):
         :return: Response tensor of shape (batch_size, output_dim)
         """
         # Forward passes the Branch net and Trunk net
-        out_B = self.branch.activation(self.branch(x[1].T))
+        out_B = self.branch.activation(self.branch(x[1]))
         out_T = self.trunk.activation(self.trunk(x[0]))
 
         # Aggregate the results of both sub-networks and add the bias
@@ -236,3 +252,47 @@ class NN_TL_Diffusion(nn.Module):
 
     def unfreeze_general_model(self):
         self.generalize.requires_grad_(True)
+
+
+class DeepONet_TL(nn.Module):
+    """
+    Implements a DeepONet architecture consisting of two sub-networks, one for encoding the input function
+    at a fixed number of sensors (branch net), and another for encoding the locations for the
+    output functions (trunk net), which should be able to learn operators accurately and efficiently from a
+    relatively small dataset
+    """
+    def __init__(self, branch_layers, trunk_layers, fine_layers, dim_branch, dim_trunk, dim_int, dim_out,
+                 activation=nn.Tanh, dropout=0.):
+        super(DeepONet_TL, self).__init__()
+
+        # The sub-networks are defined as standard FFNN
+        self.branch = FFNN(branch_layers, dim_branch, dim_int, activation=activation, dropout=dropout)
+        self.trunk = FFNN(trunk_layers, dim_trunk, dim_int, activation=activation, dropout=dropout)
+        self.b = nn.Parameter(torch.zeros(1, dim_int))  # Initialize with zeros
+
+        self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
+
+    def forward(self, x):
+        """
+        Performs a forward pass through the DeepONet architecture.
+        :param x: Input data tensor of shape (batch_size, input_dim)
+        :return: Response tensor of shape (batch_size, output_dim)
+        """
+        # Forward passes the Branch net and Trunk net
+        out_B = self.branch.activation(self.branch(x[1]))
+        out_T = self.trunk.activation(self.trunk(x[0]))
+
+        # Aggregate the results of both sub-networks and add the bias
+        out_nn = out_B * out_T + self.b
+        u_pred = self.fine(out_nn)
+        return u_pred
+
+    def freeze_general_model(self):
+        self.branch.requires_grad_(False)
+        self.trunk.requires_grad_(False)
+        self.b.requires_grad_(False)
+
+    def unfreeze_general_model(self):
+        self.branch.requires_grad_(True)
+        self.trunk.requires_grad_(True)
+        self.b.requires_grad_(True)
