@@ -1,5 +1,10 @@
 import sys
-sys.path.insert(0, "C:/Users/Josu/MGEP Dropbox/Josu Yeregui Unanue/Josu/1. Tesia/1.7 PINN DeepONet/PINN DeepONet")
+import os
+# sys.path.insert(0, "C:/Users/Josu/MGEP Dropbox/Josu Yeregui Unanue/Josu/1. Tesia/1.7 PINN DeepONet/PINN DeepONet")
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_path = os.path.join(current_dir, '..', '..', 'PINN DeepONet')
+# Add the project path to sys.path
+sys.path.insert(0, project_path)
 
 from scr.SPMe import Solid_Phase, Cell
 from scr.utils.pinn import FFNN, DeepONet, NN_TL_Diffusion, DeepONet_TL
@@ -12,8 +17,6 @@ import pybamm
 import torch
 import numpy as np
 import pickle
-import time
-import os
 from tqdm import tqdm
 from datetime import datetime
 
@@ -25,6 +28,86 @@ print("Device: ", device, "\n")
 # print(torch.get_num_threads())
 torch.set_num_threads(1)
 
+
+def store_and_print(path, j, PINN):
+    j = str(j)
+    part_path = os.path.join(path, j)
+    os.makedirs(part_path, exist_ok=True)
+    PINN.pos_model.save_model(os.path.join(part_path, "TL_pos.pt"))
+    PINN.neg_model.save_model(os.path.join(part_path, "TL_neg.pt"))
+
+    t_eval = np.arange(0, 3600)
+    cur_fun = constant(test_beta)
+
+    bcs_sample_t = torch.linspace(0., 1., 1000)
+    bcs_sample_r = torch.ones_like(bcs_sample_t)
+    bcs_sample_I = torch.tensor(cur_fun(bcs_sample_t.numpy() * 3600.))
+    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
+
+    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
+    PINN.neg_model.params["SOC_0"] = 1.
+    PINN.pos_model.params["SOC_0"] = 1.
+
+    V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
+
+    param = pybamm.ParameterValues("Chen2020")
+    PBM_model = pybamm.lithium_ion.SPM()
+
+    experiment = pybamm.Experiment(["Discharge at 1C for 100000 seconds or until 2.5 V"])
+    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
+    solution = sim.solve(initial_soc=1)
+
+    t = solution["Time [s]"].entries
+
+    V = solution["Terminal voltage [V]"].entries
+
+    plt.figure()
+    plt.grid()
+    plt.plot(t / 3600. * 5., V, "k-", label="PyBaMM")
+    plt.plot(bcs_sample_t * 5., V_pinn, "r-", label="PINN")
+    plt.ylim([2.5, 4.3])
+    plt.xlabel("Disch. Capacity [Ah]")
+    plt.ylabel("V [V]")
+    plt.legend()
+    plt.savefig(os.path.join(part_path, "Discharge.png"))
+    # plt.show()
+    plt.close()
+
+    cur_fun = constant(-test_beta)
+
+    bcs_sample_t = torch.linspace(0., 1., 1000)
+    bcs_sample_r = torch.ones_like(bcs_sample_t)
+    bcs_sample_I = torch.tensor(cur_fun(bcs_sample_t.numpy() * 3600.))
+    bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
+    PINN.neg_model.params["SOC_0"] = 0.
+    PINN.pos_model.params["SOC_0"] = 0.
+
+    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
+
+    V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
+
+    param = pybamm.ParameterValues("Chen2020")
+    PBM_model = pybamm.lithium_ion.SPM()
+
+    experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])
+    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
+    solution = sim.solve(initial_soc=0)
+
+    t = solution["Time [s]"].entries
+
+    V = solution["Terminal voltage [V]"].entries
+
+    plt.figure()
+    plt.grid()
+    plt.plot(t / 3600. * 5., V, "k-", label="PyBaMM")
+    plt.plot(bcs_sample_t * 5., V_pinn, "r-", label="PINN")
+    plt.ylim([2.5, 4.3])
+    plt.xlabel("Chg. Capacity [Ah]")
+    plt.ylabel("V [V]")
+    plt.legend()
+    plt.savefig(os.path.join(part_path, "Charge.png"))
+    # plt.show()
+    plt.close()
 
 def RMSELoss(yhat, y):
     return torch.sqrt(torch.mean((yhat-y)**2))
@@ -52,17 +135,17 @@ if __name__ == "__main__":
     # model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
     #                           dim_out=1, dropout=0.).to(device)
     model_p = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
-                          dim_branch=360, dim_trunk=3, dim_int=100, dim_out=1, dropout=0.).to(device)
+                          dim_branch=360, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos").to(device)
-    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     # model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
     #                           dim_out=1, dropout=0.).to(device)
     model_n = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
-                          dim_branch=360, dim_trunk=3, dim_int=100, dim_out=1, dropout=0.).to(device)
+                          dim_branch=360, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg").to(device)
-    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
 
     # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
     # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
@@ -78,6 +161,12 @@ if __name__ == "__main__":
 
     history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []},
                "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
+
+    # Define the directory where you want to create the folder
+    directory = '../models/'
+    current_date = datetime.now().strftime('%Y-%m-%d_%H-%M')
+    folder_path = os.path.join(directory, current_date)
+    os.makedirs(folder_path, exist_ok=True)
 
     # print("Iter \t\t PDE \t BC Centre \t BC Surf \t\t\t PDE \t BC Centre \t BC Surf")
     with tqdm(total=EPOCH, desc="Training Progress",
@@ -161,13 +250,9 @@ if __name__ == "__main__":
                 tqdm.write(f"Val loss: {loss_tot_val:.3E}\033[0m")
                 tqdm.write(f"\n")
 
-            pbar.update(1)
+                store_and_print(folder_path, j, PINN)
 
-    # Define the directory where you want to create the folder
-    directory = '../models/'
-    current_date = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    folder_path = os.path.join(directory, current_date)
-    os.makedirs(folder_path, exist_ok=True)
+            pbar.update(1)
 
     PINN.pos_model.save_model(os.path.join(folder_path, "TL_pos.pt"))
     PINN.neg_model.save_model(os.path.join(folder_path, "TL_neg.pt"))

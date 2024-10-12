@@ -1,0 +1,7 @@
+numpy~=1.26.3
+pybamm~=24.1
+matplotlib~=3.8.2
+scikit-learn~=1.4.0
+rich~=13.9.2
+ipywidgets~=8.1.5
+tqdm~=4.66.2

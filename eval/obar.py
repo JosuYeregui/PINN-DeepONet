@@ -1,81 +1,56 @@
-"""
-A rudimentary URL downloader (like wget or curl) to demonstrate Rich progress bars.
-"""
 
-import os.path
-import sys
-from concurrent.futures import ThreadPoolExecutor
-import signal
-from functools import partial
-from threading import Event
-from typing import Iterable
-from urllib.request import urlopen
-
-from rich.progress import (
-    BarColumn,
-    DownloadColumn,
-    Progress,
-    TaskID,
-    TextColumn,
-    TimeRemainingColumn,
-    TransferSpeedColumn,
-)
-
-progress = Progress(
-    TextColumn("[bold blue]{task.fields[filename]}", justify="right"),
-    BarColumn(bar_width=None),
-    "[progress.percentage]{task.percentage:>3.1f}%",
-    "•",
-    DownloadColumn(),
-    "•",
-    TransferSpeedColumn(),
-    "•",
-    TimeRemainingColumn(),
-)
-
-
-done_event = Event()
-
-
-def handle_sigint(signum, frame):
-    done_event.set()
-
-
-signal.signal(signal.SIGINT, handle_sigint)
-
-
-def copy_url(task_id: TaskID, url: str, path: str) -> None:
-    """Copy data from a url to a local file."""
-    progress.console.log(f"Requesting {url}")
-    response = urlopen(url)
-    # This will break if the response doesn't contain content length
-    progress.update(task_id, total=int(response.info()["Content-length"]))
-    with open(path, "wb") as dest_file:
-        progress.start_task(task_id)
-        for data in iter(partial(response.read, 32768), b""):
-            dest_file.write(data)
-            progress.update(task_id, advance=len(data))
-            if done_event.is_set():
-                return
-    progress.console.log(f"Downloaded {path}")
-
-
-def download(urls: Iterable[str], dest_dir: str):
-    """Download multiple files to the given directory."""
-
-    with progress:
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            for url in urls:
-                filename = url.split("/")[-1]
-                dest_path = os.path.join(dest_dir, filename)
-                task_id = progress.add_task("download", filename=filename, start=False)
-                pool.submit(copy_url, task_id, url, dest_path)
+from scr.utils.profiles import constant, grf
+from matplotlib import pyplot as plt
+import numpy as np
+from time import time
 
 
 if __name__ == "__main__":
-    # Try with https://releases.ubuntu.com/noble/ubuntu-24.04-desktop-amd64.iso
-    # and https://releases.ubuntu.com/noble/ubuntu-24.04-live-server-amd64.iso
-    if sys.argv[1:]:
-        download(sys.argv[1:], "./")
-    else:
-        print("Usage:\n\tpython downloader.py URL1 URL2 URL3 (etc)")
+    start = time()
+    cur_func = grf(1, 1000, 10, 0.5, 0.1)
+    t = np.linspace(0, 1, 1000)
+
+    res = cur_func()
+
+    print("Time: ", time() - start)
+
+    plt.plot(t, res)
+    plt.show()
+
+    start = time()
+    cur_func = constant(1)
+    t = np.linspace(0, 1, 1000)
+
+    res = cur_func(t)
+
+    print("Time: ", time() - start)
+
+    # # Parameters for the Gaussian random field
+    # n_points = 100  # Number of points in the field
+    # mean = 1  # Mean of the Gaussian distribution
+    # std_dev = 0.001  # Standard deviation
+    # length_scale = 0.05  # Controls the smoothness of the field
+    #
+    # # Generate spatial points
+    # x = np.linspace(0, 1, n_points)
+    #
+    #
+    # # Generate covariance matrix based on a Gaussian kernel
+    # def gaussian_kernel(x1, x2, length_scale):
+    #     return np.exp(-0.5 * ((x1 - x2) ** 2) / (length_scale ** 2))
+    #
+    #
+    # # Create covariance matrix
+    # covariance_matrix = np.array([[gaussian_kernel(xi, xj, length_scale) for xj in x] for xi in x])
+    #
+    # # Generate samples from the multivariate normal distribution
+    # current_profile = np.random.multivariate_normal(mean * np.ones(n_points), covariance_matrix)
+    #
+    # # Plot the current profile
+    # plt.plot(x, current_profile, label='Current Profile')
+    # plt.title('1D Gaussian Random Field')
+    # plt.xlabel('Position')
+    # plt.ylabel('Current')
+    # plt.grid()
+    # plt.legend()
+    # plt.show()

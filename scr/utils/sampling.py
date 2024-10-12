@@ -129,10 +129,10 @@ class Sampler_DONet(Sampler):
     Sampler compatible with the DeepONet architecture. The data needed for the network differs as the input to the
     DeepONet requires a separated input of the sensors (input current) to the branch net.
     """
-    def __init__(self, init_point_data, current_func, t_max=1., mode="pseudo", device="cpu"):
+    def __init__(self, init_point_data, current_func, branch_samp=1000, t_max=1., mode="pseudo", device="cpu"):
         super(Sampler_DONet, self).__init__(init_point_data, current_func, t_max, mode, device)
 
-        self.t = np.arange(0, 3600, 10, dtype=np.float32)
+        self.t = np.linspace(0, 1, branch_samp, dtype=np.float32)
         self.N = current_func(self.t)
         self.N_tch = self._cast_torch(self.N)
 

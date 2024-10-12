@@ -33,7 +33,7 @@ def constant(crate):
 
     return current
 
-def grf(T, N, length_scale=1):
+def grf(T, N, length_scale=1, mean=1, variance=0.25):
     """
     Gaussian random field for a given temperature profile.
     :param T: Temperature profile
@@ -44,10 +44,38 @@ def grf(T, N, length_scale=1):
     K = K(x)
     L = np.linalg.cholesky(K + 1e-13 * np.eye(N))
     def current(t):
-        return np.dot(L, t*T).T
+        u = np.random.randn(N)
+        return mean + np.sqrt(variance) * np.dot(L, u*T).T
 
     return current
 
+# convert above grf function to class for better handling
+class GRF:
+    def __init__(self, T, N, length_scale, mean=1, variance=0.25):
+        self.mean = mean
+        self.variance = variance
+        self.N = N
+        self.T = T
+
+        self.update(T, N, length_scale)
+
+    def update(self, T, N, length_scale):
+        x = np.linspace(0, T, num=N)[:, None]
+        K = gp.kernels.RBF(length_scale=length_scale)
+        K = K(x)
+        self.L = np.linalg.cholesky(K + 1e-13 * np.eye(N))
+
+        self.N = N
+        self.T = T
+
+        self.update_u()
+
+    def update_u(self):
+        x = np.random.randn(self.N)
+        self.u = self.mean + np.sqrt(self.variance) * np.dot(self.L, x*self.T).T
+
+    def __call__(self, t):
+        return np.interp(t, np.linspace(0, self.T, self.N), self.u).astype(np.float32)
 
 
 # TODO: Add a UDDS variable profile
