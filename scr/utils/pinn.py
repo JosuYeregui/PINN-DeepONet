@@ -262,7 +262,7 @@ class DeepONet_TL(nn.Module):
     relatively small dataset
     """
     def __init__(self, branch_layers, trunk_layers, fine_layers, dim_branch, dim_trunk, dim_int, dim_out,
-                 activation=nn.Tanh, dropout=0.):
+                 activation=nn.Tanh, dropout=0., sigma_fourier=None):
         super(DeepONet_TL, self).__init__()
 
         # The sub-networks are defined as standard FFNN
@@ -272,15 +272,25 @@ class DeepONet_TL(nn.Module):
 
         self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
 
+        self.b_values = None
+        if sigma_fourier is not None:
+            self.b_values = torch.randn((dim_trunk, trunk_layers[0] // 2)) * sigma_fourier
+            self.trunk = FFNN(trunk_layers, trunk_layers[0], dim_int, activation=activation, dropout=dropout)
+
     def forward(self, x):
         """
         Performs a forward pass through the DeepONet architecture.
         :param x: Input data tensor of shape (batch_size, input_dim)
         :return: Response tensor of shape (batch_size, output_dim)
         """
+        if self.b_values is not None:
+            fourier_encode = 2 * np.pi * x[0] @ self.b_values
+            t_encode = torch.cat([torch.sin(fourier_encode), torch.cos(fourier_encode)], dim=-1)
+        else:
+            t_encode = x[0]
         # Forward passes the Branch net and Trunk net
         out_B = self.branch.activation(self.branch(x[1]))
-        out_T = self.trunk.activation(self.trunk(x[0]))
+        out_T = self.trunk.activation(self.trunk(t_encode))
 
         # Aggregate the results of both sub-networks and add the bias
         out_nn = out_B * out_T + self.b

@@ -1,56 +1,69 @@
+"""Backend supported: tensorflow.compat.v1, paddle
 
-from scr.utils.profiles import constant, grf
-from matplotlib import pyplot as plt
+Implementation of the Poisson 1D example in paper https://arxiv.org/abs/2012.10047.
+References:
+    https://github.com/PredictiveIntelligenceLab/MultiscalePINNs.
+"""
+import deepxde as dde
 import numpy as np
-from time import time
+
+dde.backend.set_default_backend("tensorflow.compat.v1")
+
+A = 2
+B = 50
 
 
-if __name__ == "__main__":
-    start = time()
-    cur_func = grf(1, 1000, 10, 0.5, 0.1)
-    t = np.linspace(0, 1, 1000)
+# Define sine function
+if dde.backend.backend_name in ["tensorflow.compat.v1", "tensorflow"]:
+    from deepxde.backend import tf
 
-    res = cur_func()
+    sin = tf.sin
+elif dde.backend.backend_name == "paddle":
+    import paddle
 
-    print("Time: ", time() - start)
+    sin = paddle.sin
 
-    plt.plot(t, res)
-    plt.show()
 
-    start = time()
-    cur_func = constant(1)
-    t = np.linspace(0, 1, 1000)
+def pde(x, y):
+    dy_xx = dde.grad.hessian(y, x)
+    return (
+        dy_xx
+        + (np.pi * A) ** 2 * sin(np.pi * A * x)
+        + 0.1 * (np.pi * B) ** 2 * sin(np.pi * B * x)
+    )
 
-    res = cur_func(t)
 
-    print("Time: ", time() - start)
+def func(x):
+    return np.sin(np.pi * A * x) + 0.1 * np.sin(np.pi * B * x)
 
-    # # Parameters for the Gaussian random field
-    # n_points = 100  # Number of points in the field
-    # mean = 1  # Mean of the Gaussian distribution
-    # std_dev = 0.001  # Standard deviation
-    # length_scale = 0.05  # Controls the smoothness of the field
-    #
-    # # Generate spatial points
-    # x = np.linspace(0, 1, n_points)
-    #
-    #
-    # # Generate covariance matrix based on a Gaussian kernel
-    # def gaussian_kernel(x1, x2, length_scale):
-    #     return np.exp(-0.5 * ((x1 - x2) ** 2) / (length_scale ** 2))
-    #
-    #
-    # # Create covariance matrix
-    # covariance_matrix = np.array([[gaussian_kernel(xi, xj, length_scale) for xj in x] for xi in x])
-    #
-    # # Generate samples from the multivariate normal distribution
-    # current_profile = np.random.multivariate_normal(mean * np.ones(n_points), covariance_matrix)
-    #
-    # # Plot the current profile
-    # plt.plot(x, current_profile, label='Current Profile')
-    # plt.title('1D Gaussian Random Field')
-    # plt.xlabel('Position')
-    # plt.ylabel('Current')
-    # plt.grid()
-    # plt.legend()
-    # plt.show()
+
+geom = dde.geometry.Interval(0, 1)
+bc = dde.icbc.DirichletBC(geom, func, lambda _, on_boundary: on_boundary)
+data = dde.data.PDE(
+    geom,
+    pde,
+    bc,
+    1280,
+    2,
+    train_distribution="pseudo",
+    solution=func,
+    num_test=10000,
+)
+
+layer_size = [1] + [100] * 3 + [1]
+activation = "tanh"
+initializer = "Glorot uniform"
+net = dde.nn.MsFFN(layer_size, activation, initializer, sigmas=[1, 10])
+
+model = dde.Model(data, net)
+model.compile(
+    "adam",
+    lr=0.001,
+    metrics=["l2 relative error"],
+    decay=("inverse time", 2000, 0.9),
+)
+
+pde_residual_resampler = dde.callbacks.PDEPointResampler(period=1)
+model.train(iterations=20000, callbacks=[pde_residual_resampler])
+
+dde.saveplot(model.losshistory, model.train_state, issave=True, isplot=True)
