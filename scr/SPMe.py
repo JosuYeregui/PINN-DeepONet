@@ -249,7 +249,10 @@ class Solid_Phase(PINN):
         u = self.model(x)
         if isinstance(x, tuple):
             x = x[0]   # In case of DeepONet the input is a tuple with (x, N)
-        u = x[:, 0] * u.flatten() + (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
+
+        # t = 1 - torch.exp(-x[:, 0] * 10.)
+        t = x[:, 0]
+        u = t * u.flatten() + (self.params["SOL_"+self.el_name][0] + ((self.params["SOL_"+self.el_name][1] -
                                                              self.params["SOL_"+self.el_name][0]) *
                                                                   self.params["SOC_0"]))
         return u

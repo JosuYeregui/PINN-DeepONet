@@ -50,8 +50,10 @@ def plot_pybamm_vs_PINN(cur_func, SOC, PINN, folder_path, name, plot=False):
     param["Current function [A]"] = cur_func_pybamm
     sim = pybamm.Simulation(PBM_model, parameter_values=param)
     try:
-        solution = sim.solve(t_eval)
+        solution = sim.solve(t_eval, initial_soc=SOC)
         V = solution["Terminal voltage [V]"].entries
+        if t_eval.shape[0] != V.shape[0]:
+            V = np.interp(t_eval, solution["Time [s]"].entries, V)
     except:
         V = np.zeros_like(t_eval)
 
@@ -161,10 +163,10 @@ if __name__ == "__main__":
 
     # model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
     #                           dim_out=1, dropout=0.).to(device)
-    model_p = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
+    model_p = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[128, 64, 64, 64], fine_layers=[32, 32],
                           dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos").to(device)
-    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.00001, 'betas': (0.9, 0.999)}, device=device)
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     # model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
@@ -172,7 +174,7 @@ if __name__ == "__main__":
     model_n = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
                           dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg").to(device)
-    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.00001, 'betas': (0.9, 0.999)}, device=device)
 
     # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
     # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
