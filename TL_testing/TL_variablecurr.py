@@ -7,7 +7,7 @@ project_path = os.path.join(current_dir, '..', '..', 'PINN DeepONet')
 sys.path.insert(0, project_path)
 
 from scr.SPMe import Solid_Phase, Cell
-from scr.utils.pinn import FFNN, DeepONet, NN_TL_Diffusion, DeepONet_TL
+from scr.utils.pinn import FFNN, DeepONet, NN_TL_Diffusion, DeepONet_TL, DeepONet_TL_FF
 from scr.utils.sampling import Sampler, Sampler_DONet
 from scr.utils.parameters import load_params
 from scr.utils.profiles import zheng_current, constant, GRF
@@ -163,16 +163,16 @@ if __name__ == "__main__":
 
     # model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
     #                           dim_out=1, dropout=0.).to(device)
-    model_p = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
-                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, dropout=0., sigma_fourier=1.).to(device)
+    model_p = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[32, 32, 32], fine_layers=[32, 32],
+                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 1., 10.],dropout=0.).to(device)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos").to(device)
     optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.00005, 'betas': (0.9, 0.999)}, device=device)
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     # model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
     #                           dim_out=1, dropout=0.).to(device)
-    model_n = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
-                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, dropout=0., sigma_fourier=1.).to(device)
+    model_n = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[32, 32, 32], fine_layers=[32, 32],
+                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 1., 10.], dropout=0.).to(device)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg").to(device)
     optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.00005, 'betas': (0.9, 0.999)}, device=device)
 

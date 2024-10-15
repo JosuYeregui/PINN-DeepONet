@@ -262,7 +262,7 @@ class DeepONet_TL(nn.Module):
     relatively small dataset
     """
     def __init__(self, branch_layers, trunk_layers, fine_layers, dim_branch, dim_trunk, dim_int, dim_out,
-                 activation=nn.Tanh, dropout=0., sigma_fourier=None):
+                 activation=nn.Tanh, dropout=0.):
         super(DeepONet_TL, self).__init__()
 
         # The sub-networks are defined as standard FFNN
@@ -272,25 +272,15 @@ class DeepONet_TL(nn.Module):
 
         self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
 
-        self.b_values = None
-        if sigma_fourier is not None:
-            self.b_values = torch.randn((dim_trunk, trunk_layers[0] // 2)) * sigma_fourier
-            self.trunk = FFNN(trunk_layers, trunk_layers[0], dim_int, activation=activation, dropout=dropout)
-
     def forward(self, x):
         """
         Performs a forward pass through the DeepONet architecture.
         :param x: Input data tensor of shape (batch_size, input_dim)
         :return: Response tensor of shape (batch_size, output_dim)
         """
-        if self.b_values is not None:
-            fourier_encode = 2 * np.pi * x[0] @ self.b_values
-            t_encode = torch.cat([torch.sin(fourier_encode), torch.cos(fourier_encode)], dim=-1)
-        else:
-            t_encode = x[0]
         # Forward passes the Branch net and Trunk net
         out_B = self.branch.activation(self.branch(x[1]))
-        out_T = self.trunk.activation(self.trunk(t_encode))
+        out_T = self.trunk.activation(self.trunk(x[0]))
 
         # Aggregate the results of both sub-networks and add the bias
         out_nn = out_B * out_T + self.b
@@ -305,4 +295,60 @@ class DeepONet_TL(nn.Module):
     def unfreeze_general_model(self):
         self.branch.requires_grad_(True)
         self.trunk.requires_grad_(True)
+        self.b.requires_grad_(True)
+
+
+class DeepONet_TL_FF(nn.Module):
+    """
+    Implements a DeepONet architecture consisting of two sub-networks, one for encoding the input function
+    at a fixed number of sensors (branch net), and another for encoding the locations for the
+    output functions (trunk net), which should be able to learn operators accurately and efficiently from a
+    relatively small dataset
+    """
+    def __init__(self, branch_layers, trunk_layers, fine_layers, dim_branch, dim_trunk, dim_int, dim_out,
+                 sigmas_fourier=None, activation=nn.Tanh, dropout=0.):
+        super(DeepONet_TL_FF, self).__init__()
+
+        self.activation = activation
+
+        # The sub-networks are defined as standard FFNN
+        self.branch = FFNN(branch_layers, dim_branch, dim_int, activation=activation, dropout=dropout)
+        self.b = nn.Parameter(torch.zeros(1, dim_int))  # Initialize with zeros
+
+        self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
+
+        self.b_values = [torch.randn((dim_trunk, trunk_layers[0] // 2)) * s for s in sigmas_fourier]
+        self.trunk = [FFNN(trunk_layers[:-1], trunk_layers[0], trunk_layers[-1], activation=activation, dropout=dropout) for _ in range(len(sigmas_fourier))]
+        self.trunk_dense = nn.Linear(trunk_layers[-1] * len(sigmas_fourier), dim_int)
+
+    def forward(self, x):
+        """
+        Performs a forward pass through the DeepONet architecture.
+        :param x: Input data tensor of shape (batch_size, input_dim)
+        :return: Response tensor of shape (batch_size, output_dim)
+        """
+        # Forward passes the Trunk net
+        out_T = []
+        for b, t in zip(self.b_values, self.trunk):
+            fourier_encode = 2 * np.pi * x[0] @ b
+            t_encode = torch.cat([torch.sin(fourier_encode), torch.cos(fourier_encode)], dim=-1)
+            out_T.append(t.activation(t(t_encode)))
+        out_T = torch.cat(out_T, dim=-1)
+        out_T = self.activation(self.trunk_dense(out_T))
+        # Forward passes the Branch net
+        out_B = self.branch.activation(self.branch(x[1]))
+
+        # Aggregate the results of both sub-networks and add the bias
+        out_nn = out_B * out_T + self.b
+        u_pred = self.fine(out_nn)
+        return u_pred
+
+    def freeze_general_model(self):
+        self.branch.requires_grad_(False)
+        self.trunk = [t.requires_grad_(False) for t in self.trunk]
+        self.b.requires_grad_(False)
+
+    def unfreeze_general_model(self):
+        self.branch.requires_grad_(True)
+        self.trunk = [t.requires_grad_(True) for t in self.trunk]
         self.b.requires_grad_(True)
