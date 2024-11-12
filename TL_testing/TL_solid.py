@@ -109,6 +109,9 @@ def store_and_print(path, j, PINN):
     # plt.show()
     plt.close()
 
+    with open(os.path.join(part_path, 'Weights.pkl'), 'wb') as fp:
+        pickle.dump({"P":PINN.pos_model.weights, "N": PINN.neg_model.weights}, fp)
+
 def RMSELoss(yhat, y):
     return torch.sqrt(torch.mean((yhat-y)**2))
 
@@ -137,7 +140,7 @@ if __name__ == "__main__":
     model_p = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
                           dim_branch=360, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos").to(device)
-    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weights, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
     # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
     # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
     # model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
@@ -145,7 +148,7 @@ if __name__ == "__main__":
     model_n = DeepONet_TL(branch_layers=[64, 64, 64, 64], trunk_layers=[64, 64, 64, 64], fine_layers=[32, 32],
                           dim_branch=360, dim_trunk=3, dim_int=128, dim_out=1, dropout=0.).to(device)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg").to(device)
-    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
+    optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weights, adam_param = {'lr': 0.0001, 'betas': (0.9, 0.999)}, device=device)
 
     # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
     # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
@@ -156,8 +159,8 @@ if __name__ == "__main__":
 
     # Sampler_tr = Sampler(training_points, constant(1.), mode="quasi", device=device)
     # Sampler_val = Sampler(validation_points, constant(1.), mode="quasi", device=device)
-    Sampler_tr = Sampler_DONet(training_points, constant(1.), mode="quasi", device=device)
-    Sampler_val = Sampler_DONet(validation_points, constant(1.), mode="quasi", device=device)
+    Sampler_tr = Sampler_DONet(training_points, constant(1.), branch_samp=360, mode="quasi", device=device)
+    Sampler_val = Sampler_DONet(validation_points, constant(1.), branch_samp=360, mode="quasi", device=device)
 
     history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []},
                "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
@@ -207,8 +210,8 @@ if __name__ == "__main__":
 
             losses_tr = PINN.pos_model.train_step(optimizer_p, Sampler_tr)
             losses_val = PINN.pos_model.evaluate(Sampler_val)
-            loss_tot_tr = np.sum([l * w for l, w in zip(losses_tr, PINN.pos_model.weigths)])
-            loss_tot_val = np.sum([l * w for l, w in zip(losses_val, PINN.pos_model.weigths)])
+            loss_tot_tr = np.sum([l * w for l, w in zip(losses_tr, PINN.pos_model.weights)])
+            loss_tot_val = np.sum([l * w for l, w in zip(losses_val, PINN.pos_model.weights)])
 
             if j % 1000 == 0:
                 history["positive"]["loss_tr"].append(loss_tot_tr)
@@ -219,7 +222,7 @@ if __name__ == "__main__":
 
                 tqdm.write(f"\033[3mIteration: {j}\033[0m")
                 tqdm.write("\033[1mPositive\033[0m")
-                for l, w, n in zip(losses_tr, PINN.pos_model.weigths, ["PDE", "BC c", "BC s"]):
+                for l, w, n in zip(losses_tr, PINN.pos_model.weights, ["PDE", "BC c", "BC s"]):
                     tqdm.write(f"{n} loss: {l:.3E}", end="\t")
                     tqdm.write(f"\033[92m{n} weight: {w:.3E}\033[0m", end="\t")
 
@@ -228,8 +231,8 @@ if __name__ == "__main__":
 
             losses_tr = PINN.neg_model.train_step(optimizer_n, Sampler_tr)
             losses_val = PINN.neg_model.evaluate(Sampler_val)
-            loss_tot_tr = np.sum([l * w for l, w in zip(losses_tr, PINN.neg_model.weigths)])
-            loss_tot_val = np.sum([l * w for l, w in zip(losses_val, PINN.neg_model.weigths)])
+            loss_tot_tr = np.sum([l * w for l, w in zip(losses_tr, PINN.neg_model.weights)])
+            loss_tot_val = np.sum([l * w for l, w in zip(losses_val, PINN.neg_model.weights)])
 
             # optimizer_p_w.step()
             # optimizer_n_w.step()
@@ -242,7 +245,7 @@ if __name__ == "__main__":
                 history["negative"]["iteration"].append(j)
 
                 tqdm.write("\033[1mNegative\033[0m")
-                for l, w, n in zip(losses_tr, PINN.neg_model.weigths, ["PDE", "BC c", "BC s"]):
+                for l, w, n in zip(losses_tr, PINN.neg_model.weights, ["PDE", "BC c", "BC s"]):
                     tqdm.write(f"{n} loss: {l:.3E}", end="\t")
                     tqdm.write(f"\033[92m{n} weight: {w:.3E}\033[0m", end="\t")
 
@@ -344,3 +347,6 @@ if __name__ == "__main__":
     plt.legend()
     plt.savefig(os.path.join(folder_path, "Charge.png"))
     # plt.show()
+
+    with open(os.path.join(folder_path, 'Weights.pkl'), 'wb') as fp:
+        pickle.dump({"P":PINN.pos_model.weights, "N": PINN.neg_model.weights}, fp)

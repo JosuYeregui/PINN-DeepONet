@@ -161,33 +161,21 @@ if __name__ == "__main__":
                          "BC_Center": {"type": "BC", "N": 15, "BC_pos": 0.},
                          "BC_Surf": {"type": "BC", "N": 15, "BC_pos": 1.}}
 
-    # model_p = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-    #                           dim_out=1, dropout=0.).to(device)
-    model_p = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[32, 32, 32], fine_layers=[32, 32],
-                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 1., 10.],dropout=0.).to(device)
+    model_p = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[16, 16, 16], fine_layers=[32, 32],
+                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 0.5, 1., 5.],dropout=0.).to(device)
     pos_model = Solid_Phase(model_p, parameters, [1., 1., 1.], criterion=RMSELoss, electrode="pos").to(device)
     optimizer_p = NTK_Adaptive(pos_model.model.parameters(), pos_model.weigths, adam_param = {'lr': 0.00005, 'betas': (0.9, 0.999)}, device=device)
-    # optimizer_p = torch.optim.Adam(pos_model.model.parameters(), lr=0.0005)
-    # optimizer_p_w = torch.optim.Adam([pos_model.adj_w], lr=0.0001)
-    # model_n = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-    #                           dim_out=1, dropout=0.).to(device)
-    model_n = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[32, 32, 32], fine_layers=[32, 32],
-                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 1., 10.], dropout=0.).to(device)
+
+    model_n = DeepONet_TL_FF(branch_layers=[64, 64, 64, 64], trunk_layers=[16, 16, 16], fine_layers=[32, 32],
+                          dim_branch=3600, dim_trunk=3, dim_int=128, dim_out=1, sigmas_fourier=[0.1, 0.5, 1., 5.], dropout=0.).to(device)
     neg_model = Solid_Phase(model_n, parameters,[1., 1., 1.], criterion=RMSELoss, electrode="neg").to(device)
     optimizer_n = NTK_Adaptive(neg_model.model.parameters(), neg_model.weigths, adam_param = {'lr': 0.00005, 'betas': (0.9, 0.999)}, device=device)
-
-    # optimizer_n = torch.optim.Adam(neg_model.model.parameters(), lr=0.0005)
-    # optimizer_n_w = torch.optim.Adam([neg_model.adj_w], lr=0.0001)
 
     PINN = Cell(pos_model, neg_model)
 
     l_s = np.random.uniform(0.01, 0.1)
     grf_func = GRF(1, 1000, l_s, mean=0.5, variance=0.1)
 
-    # PINN.neg_model.params["as_n"] = torch.nn.Parameter(torch.tensor([parameters["as_n"]]), requires_grad=False)
-
-    # Sampler_tr = Sampler(training_points, constant(1.), mode="quasi", device=device)
-    # Sampler_val = Sampler(validation_points, constant(1.), mode="quasi", device=device)
     cur_func, SOC = get_curfunc()
     Sampler_tr = Sampler_DONet(training_points, cur_func, branch_samp=3600, mode="quasi", device=device)
     Sampler_val = Sampler_DONet(validation_points, cur_func, branch_samp=3600, mode="quasi", device=device)

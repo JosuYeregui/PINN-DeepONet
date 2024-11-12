@@ -14,10 +14,15 @@ class Cell():
         self.electrolyte = electrolyte
 
     def compute_V(self, samples):
+        U_0_p, U_0_n, eta_p, eta_n = self.compute_V_comps(samples)
+
+        return U_0_p - U_0_n + eta_p - eta_n
+
+    def compute_V_comps(self, samples):
         if isinstance(samples, tuple):
             I = samples[0][:, 2] * self.pos_model.params["I_typ"]
         else:
-            I = samples[:, 2]*self.pos_model.params["I_typ"]
+            I = samples[:, 2] * self.pos_model.params["I_typ"]
 
         c_pos = self.pos_model(samples)
         U_0_p, eta_p = self._get_solid_vcomps(c_pos, self.pos_model.params, I, elec="p")
@@ -25,7 +30,7 @@ class Cell():
         c_neg = self.neg_model(samples)
         U_0_n, eta_n = self._get_solid_vcomps(c_neg, self.neg_model.params, -I, elec="n")
 
-        return U_0_p - U_0_n + eta_p - eta_n
+        return U_0_p, U_0_n, eta_p, eta_n
 
     @staticmethod
     def _get_solid_vcomps(c, parameters, I, elec="p"):
@@ -46,7 +51,7 @@ class Solid_Phase(PINN):
     """
     PINN for Solid phase of the battery for both negative and positive electrodes.
     """
-    def __init__(self, model, parameters, weigths, criterion=nn.MSELoss(), c_rate=1.,
+    def __init__(self, model, parameters, weights, criterion=nn.MSELoss(), c_rate=1.,
                  electrode="pos"):
         super().__init__(model, criterion)
 
@@ -56,14 +61,7 @@ class Solid_Phase(PINN):
         self.tc = (1./c_rate)*3600.
 
         # The loss function has weighted terms, received as input or not scaled
-        # self.weights = {"PDE": 1., "IV": 1., "BC_Center": 1., "BC_Surf": 1.}
-        # if weights is not None and not adjustable_weights:
-        #     self.weights = weights
-        #
-        # self.adjustable_weights = adjustable_weights
-        #
-        # self.adj_w = nn.Parameter(data=torch.Tensor([1, 1, 1]), requires_grad=adjustable_weights)
-        self.weigths = weigths
+        self.weights = weights
 
         # There are certain differences between the positive and negative domain solid equations,
         # mainly in flux direction

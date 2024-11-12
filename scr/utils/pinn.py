@@ -309,7 +309,7 @@ class DeepONet_TL_FF(nn.Module):
                  sigmas_fourier=None, activation=nn.Tanh, dropout=0.):
         super(DeepONet_TL_FF, self).__init__()
 
-        self.activation = activation
+        self.activation = activation()
 
         # The sub-networks are defined as standard FFNN
         self.branch = FFNN(branch_layers, dim_branch, dim_int, activation=activation, dropout=dropout)
