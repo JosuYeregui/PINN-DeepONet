@@ -251,7 +251,7 @@ if __name__ == "__main__":
                 tqdm.write(f"Val loss: {loss_tot_val:.3E}\033[0m")
                 tqdm.write(f"\n")
 
-                store_and_print(folder_path, j, PINN)
+                # store_and_print(folder_path, j, PINN)
 
             pbar.update(1)
 

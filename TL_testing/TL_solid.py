@@ -121,6 +121,10 @@ if __name__ == "__main__":
     EPOCH = 50000
 
     parameters = load_params()
+    parameters["SOL_p"] = [0.8599, 0.2719]
+    parameters["SOL_n"] = [0.0339, 0.9742]
+    parameters["D_p"] = 5.57979526e-13  # 1.64852539e-14
+    parameters["D_n"] = 1.91909180e-15
 
     training_points = {"PDE": {"type": "PDE", "N": 1000},
                        "IV": {"type": "IV", "N": 100},

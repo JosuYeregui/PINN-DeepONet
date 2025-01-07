@@ -52,7 +52,7 @@ if __name__ == "__main__":
     history = {"electrolyte":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(10000 + 1):
+    for j in range(3000 + 1):
         t = time.time()
         rate_tr = np.random.choice(betas_tr)
         rate_val = np.random.choice(betas_val)
