@@ -1,4 +1,4 @@
-from scr.utils import load_params
+from scr.utils.parameters import load_params
 import matplotlib.pyplot as plt
 
 import pybamm
@@ -129,7 +129,7 @@ def pde_ns_new(x, c, t, C_rate, params, Ne):
 
     result = left - right
 
-    return result
+    return result, dcdt, dcdx, left, right
 
 
 if __name__ == "__main__":
@@ -153,12 +153,49 @@ if __name__ == "__main__":
     t = sol["Time [s]"].entries[:-1]
     t_test = np.arange(0, t[-1], 1)
     x = sol["x [m]"].entries[:, 0]
-    x_test = np.arange(0, x[-1], 1e-7)
-    ce_tend = ce(t=t_test, x=x)
-    Ne_tend = Ne(t=t_test, x=x)
+    x_test = x# np.arange(0, x[-1], 1e-7)
+    ce_tend = ce(t=t_test, x=x_test)
+    Ne_tend = Ne(t=t_test, x=x_test)
 
     # result = pde(x/parameters["L"], ce_tend/parameters["ce0"], t_test, test_C, parameters)
-    result = pde_ns_new(x, ce_tend, t_test, test_C, parameters, Ne_tend)
+    result, dcdt, dcdx, left, right = pde_ns_new(x_test, ce_tend, t_test, test_C, parameters, Ne_tend)
+    result[result > 5.] = 5.
+    result[result < -5.] = -5.
+
+    left[left > 5.] = 5.
+    left[left < -5.] = -5.
+
+    right[right > 5.] = 5.
+    right[right < -5.] = -5.
+
+    def plot_area(points, style, cmap_label):
+        plt.subplots(figsize=(7, 3), tight_layout=True)
+        plot = plt.pcolormesh(t_test, x_test, points, cmap=style, shading='gouraud')
+        cbar = plt.colorbar(plot)
+        # plt.contour(t_test, x_test, points, 10, colors='gray')
+        plt.ylabel('$x$')
+        plt.xlabel('$t$ [h]')
+        cbar.set_label(cmap_label)
+        # plt.savefig('/content/drive/MyDrive/Datos/con_PINN_pos.png')
+        plt.show()
+
+
+    plot_area(result, 'RdBu_r', 'res')
+    plot_area(np.abs(dcdt), 'Oranges', 'dcdt')
+    plot_area(dcdx, 'Oranges', 'dcdr')
     print(result)
+
+    # Plot left and right at the end of the test
+    plt.figure()
+    plt.plot(x_test, left[:, -1], label="left")
+    plt.plot(x_test, right[:, -1], label="right")
+    plt.legend()
+    plt.show()
+
+    plt.figure()
+    # plt.plot(x_test, dcdx[:, -1], label="dcdx")
+    plt.plot(x_test, dcdt[:, -1], label="dcdt")
+    plt.legend()
+    plt.show()
 
 

@@ -1,6 +1,6 @@
 import sys
 import os
-# sys.path.insert(0, "C:/Users/Josu/MGEP Dropbox/Josu Yeregui Unanue/Josu/1. Tesia/1.7 PINN DeepONet/PINN DeepONet")
+# sys.path.insert(0, "C:/Users/Josu/1. Tesia/1.7 PINN DeepONet/PINN DeepONet")
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_path = os.path.join(current_dir, '..', '..', 'PINN DeepONet')
 # Add the project path to sys.path
@@ -50,6 +50,7 @@ def store_and_print(path, j, PINN):
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
+    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Discharge at 1C for 100000 seconds or until 2.5 V"])
@@ -68,7 +69,7 @@ def store_and_print(path, j, PINN):
     plt.xlabel("Disch. Capacity [Ah]")
     plt.ylabel("V [V]")
     plt.legend()
-    plt.savefig(os.path.join(part_path, "Discharge.png"))
+    plt.savefig(os.path.join(part_path, "Discharge.svg"), format="svg")
     # plt.show()
     plt.close()
 
@@ -85,6 +86,7 @@ def store_and_print(path, j, PINN):
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
+    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])
@@ -103,7 +105,7 @@ def store_and_print(path, j, PINN):
     plt.xlabel("Chg. Capacity [Ah]")
     plt.ylabel("V [V]")
     plt.legend()
-    plt.savefig(os.path.join(part_path, "Charge.png"))
+    plt.savefig(os.path.join(part_path, "Charge.svg"), format="svg")
     # plt.show()
     plt.close()
 
@@ -116,36 +118,12 @@ def RMSELoss(yhat, y):
 
 if __name__ == "__main__":
 
+    # Define maximum epoch number
     EPOCH = 50000
-
-    if sys.argv[1] is not None:
-        dt_p = float(sys.argv[1])
-    else:
-        dt_p = 1.
-
-    if sys.argv[2] is not None:
-        dt_n = float(sys.argv[2])
-    else:
-        dt_n = 1.
-
-    foldername = "CC_dtp" + str(dt_p) + "_dtn" + str(dt_n) + "_"
-
+    # Define the directory where you want to create the folder
+    directory = '../models/'
+    # Load parameters from scr/parameters
     parameters = load_params()
-    # parameters["SOL_p"] = [0.8599, 0.2719]
-    # parameters["SOL_n"] = [0.0339, 0.9742]
-    parameters["D_p"] = 1.22679499e-15  # 1.64852539e-14
-    parameters["D_n"] = 1.46457550e-15
-    parameters["as_p"] *= 7.555631166180735/8.7323 * dt_p
-    parameters["eps_p"] *= 7.555631166180735/8.7323 * dt_p
-    parameters["as_n"] *= 6.014505825096271/5.8276 * dt_n
-    parameters["eps_n"] *= 6.014505825096271/5.8276 * dt_n
-    print("pos eps: ", parameters["eps_p"], "\t\tneg eps: ", parameters["eps_n"])
-
-    param = pybamm.ParameterValues("Chen2020")
-    param["Positive electrode active material volume fraction"] = parameters["eps_p"]
-    param["Negative electrode active material volume fraction"] = parameters["eps_n"]
-    param["Positive electrode diffusivity [m2.s-1]"] = parameters["D_p"]
-    param["Negative electrode diffusivity [m2.s-1]"] = parameters["D_n"]
 
     training_points = {"PDE": {"type": "PDE", "N": 1000},
                        "IV": {"type": "IV", "N": 100},
@@ -187,13 +165,11 @@ if __name__ == "__main__":
     Sampler_tr = Sampler_DONet(training_points, constant(1.), branch_samp=360, mode="quasi", device=device)
     Sampler_val = Sampler_DONet(validation_points, constant(1.), branch_samp=360, mode="quasi", device=device)
 
-    history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []},
-               "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
+    history = {"positive":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": [], "weights": []},
+               "negative":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": [], "weights": []}}
 
-    # Define the directory where you want to create the folder
-    directory = '../models/'
     current_date = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    folder_path = os.path.join(directory, foldername + current_date)
+    folder_path = os.path.join(directory, current_date)
     os.makedirs(folder_path, exist_ok=True)
 
     # print("Iter \t\t PDE \t BC Centre \t BC Surf \t\t\t PDE \t BC Centre \t BC Surf")
@@ -243,6 +219,7 @@ if __name__ == "__main__":
                 history["positive"]["losses_tr"].append(losses_tr)
                 history["positive"]["loss_val"].append(loss_tot_val)
                 history["positive"]["losses_val"].append(losses_val)
+                history["positive"]["weights"].append(PINN.pos_model.weights)
                 history["positive"]["iteration"].append(j)
 
                 tqdm.write(f"\033[3mIteration: {j}\033[0m")
@@ -267,6 +244,7 @@ if __name__ == "__main__":
                 history["negative"]["losses_tr"].append(losses_tr)
                 history["negative"]["loss_val"].append(loss_tot_val)
                 history["negative"]["losses_val"].append(losses_val)
+                history["negative"]["weights"].append(PINN.neg_model.weights)
                 history["negative"]["iteration"].append(j)
 
                 tqdm.write("\033[1mNegative\033[0m")
@@ -278,7 +256,7 @@ if __name__ == "__main__":
                 tqdm.write(f"Val loss: {loss_tot_val:.3E}\033[0m")
                 tqdm.write(f"\n")
 
-                # store_and_print(folder_path, j, PINN)
+                store_and_print(folder_path, j, PINN)
 
             pbar.update(1)
 
@@ -333,7 +311,7 @@ if __name__ == "__main__":
     plt.xlabel("Disch. Capacity [Ah]")
     plt.ylabel("V [V]")
     plt.legend()
-    plt.savefig(os.path.join(folder_path, "Discharge.png"))
+    plt.savefig(os.path.join(folder_path, "Discharge.svg"), format="svg")
     # plt.show()
 
 
@@ -351,6 +329,7 @@ if __name__ == "__main__":
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
+    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])
@@ -369,7 +348,7 @@ if __name__ == "__main__":
     plt.xlabel("Chg. Capacity [Ah]")
     plt.ylabel("V [V]")
     plt.legend()
-    plt.savefig(os.path.join(folder_path, "Charge.png"))
+    plt.savefig(os.path.join(folder_path, "Charge.svg"), format="svg")
     # plt.show()
 
     with open(os.path.join(folder_path, 'Weights.pkl'), 'wb') as fp:

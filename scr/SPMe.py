@@ -8,17 +8,40 @@ import numpy as np
 
 
 class Cell():
+    """
+    Battery cell model combining the positive and negative solid-phase electrodes
+    and optionally an electrolyte model (TODO yet).
+    """
     def __init__(self, pos_model, neg_model, electrolyte=None):
+        """
+        Initializes the Cell with the provided electrode and (optional) electrolyte models.
+        :param pos_model: Positive electrode solid-phase model (PINN).
+        :param neg_model: Negative electrode solid-phase model (PINN).
+        :param electrolyte: Electrolyte model (optional).
+        """
         self.pos_model = pos_model
         self.neg_model = neg_model
         self.electrolyte = electrolyte
 
     def compute_V(self, samples):
+        """
+        Computes the total cell voltage based on electrode open-circuit voltages and overpotentials.
+        :param samples: Input samples containing [t, r, I/I_typ].
+        :return: Cell voltage values at the given input points.
+        """
         U_0_p, U_0_n, eta_p, eta_n = self.compute_V_comps(samples)
 
         return U_0_p - U_0_n + eta_p - eta_n
 
     def compute_V_comps(self, samples):
+        """
+        Computes the individual electrode voltage components: open-circuit potential (U_0)
+        and overpotential (η) for both electrodes.
+        :param samples: Input samples containing [t, r, I/I_typ].
+        :return: U_0_p, U_0_n, eta_p, eta_n.
+        """
+
+        # Compute positive electrode voltage components
         if isinstance(samples, tuple):
             I = samples[0][:, 2] * self.pos_model.params["I_typ"]
         else:
@@ -27,6 +50,7 @@ class Cell():
         c_pos = self.pos_model(samples)
         U_0_p, eta_p = self._get_solid_vcomps(c_pos, self.pos_model.params, I, elec="p")
 
+        # Compute negative electrode voltage components
         c_neg = self.neg_model(samples)
         U_0_n, eta_n = self._get_solid_vcomps(c_neg, self.neg_model.params, -I, elec="n")
 
@@ -34,6 +58,13 @@ class Cell():
 
     @staticmethod
     def _get_solid_vcomps(c, parameters, I, elec="p"):
+        """
+        Computes the individual electrode voltage components: open-circuit potential (U_0)
+        and overpotential (η) for a given electrode.
+        :param c: Input samples containing [t, r, I/I_typ].
+        :return: U_O_x, eta_x
+        """
+        # OCV from params
         OCV = parameters["E_"+elec](c)
 
         RT_F = parameters["R"] * parameters["T"] / parameters["F"]
@@ -260,6 +291,9 @@ class Solid_Phase(PINN):
         return u
 
 
+# TODO: Add electrolyte dynamics.
+# New TODO: Abandon this approach because of the weird behaviour with the picewise function
+
 class Electrolyte(PINN):
 
     def __init__(self, model, parameters, weights, criterion=nn.MSELoss(), c_rate=1.):
@@ -284,10 +318,12 @@ class Electrolyte(PINN):
         loss = []
 
         pde_sample = sampler.sample("PDE")
-        c_pde = self(pde_sample)
+        pde_sample_conv = pde_sample #* torch.tensor([self.tc, self.params["L"], 1.])
+        c_pde = self(pde_sample_conv)
 
-        loss.append(self.criterion(self._pde(pde_sample, c_pde),
+        loss.append(self.criterion(self._pde(pde_sample_conv, c_pde),
                                                          torch.zeros_like(c_pde)))
+        # loss.append(torch.mean(self._pde(pde_sample, c_pde)))
 
         # iv_sample = sampler.sample("IV", torch.Tensor([1., 1., self.C_rate]), self.C_rate)
         # c_iv = self(iv_sample)
@@ -295,15 +331,17 @@ class Electrolyte(PINN):
         # loss.append(self.criterion(self._iv(c_iv), torch.zeros_like(c_iv)))
 
         bcc_sample = sampler.sample("BC_Left")
-        c_bcc = self(bcc_sample)
+        bcc_sample_conv = bcc_sample #* torch.tensor([self.tc, self.params["L"], 1.])
+        c_bcc = self(bcc_sample_conv)
 
-        loss.append(self.criterion(self._bc(bcc_sample, c_bcc),
+        loss.append(self.criterion(self._bc(bcc_sample_conv, c_bcc),
                                                              torch.zeros_like(c_bcc)))
 
         bcs_sample = sampler.sample("BC_Right")
-        c_bcs = self(bcs_sample)
+        bcs_sample_conv = bcs_sample #* torch.tensor([self.tc, self.params["L"], 1.])
+        c_bcs = self(bcs_sample_conv)
 
-        loss.append(self.criterion(self._bc(bcs_sample, c_bcs),
+        loss.append(self.criterion(self._bc(bcs_sample_conv, c_bcs),
                                    torch.zeros_like(c_bcs)))
 
         return torch.stack(loss)
@@ -327,6 +365,21 @@ class Electrolyte(PINN):
 
         return dcdx
 
+    def testing(self):
+
+        self.model.eval()
+
+        bcs_sample_x = torch.linspace(0., 1., 1000, requires_grad=True)  # * elec_model.params["L"]
+        bcs_sample_t = torch.ones_like(bcs_sample_x, requires_grad=True)  # * t_end
+        bcs_sample_I = torch.ones_like(bcs_sample_t, requires_grad=True)
+        bcs_sample = torch.stack([bcs_sample_t, bcs_sample_x, bcs_sample_I]).t()
+        c = self(bcs_sample)
+
+        dcdx = torch.autograd.grad(c, bcs_sample, grad_outputs=torch.ones_like(c),
+                                   create_graph=True)[0]
+
+        print(torch.mean(dcdx[:, 0]).detach().numpy())
+
     def _pde(self, x, c):
         i_app = x[:, 2] * self.params["I_typ"] / self.params["A"]
 
@@ -344,6 +397,7 @@ class Electrolyte(PINN):
         left[idx_Ln] *= self.params["por_n"]
         left[idx_Ls] *= self.params["por_s"]
         left[idx_Lp] *= self.params["por_p"]
+        # left = torch.ones_like(c)
 
         De_eff = torch.ones_like(c) * self.params["D_e_const"]
         # De_eff = self.params["D_e"](c)
@@ -351,12 +405,12 @@ class Electrolyte(PINN):
         De_eff[idx_Ls] *= (self.params["por_s"] ** self.params["brug"])
         De_eff[idx_Lp] *= (self.params["por_p"] ** self.params["brug"])
         right = torch.autograd.grad(De_eff * dcdx[:, 1], x, grad_outputs=torch.ones_like(dcdx[:, 1]),
-                                    create_graph=True)[0][:, 1] * 10.
+                                    create_graph=True)[0][:, 1]
 
         right *= self.params["ce0"] / self.params["L"] ** 2
 
-        right[idx_Ln] += i_app[idx_Ln] / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"])
-        right[idx_Lp] -= i_app[idx_Lp] / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"])
+        right[idx_Ln] += (i_app[idx_Ln] / (self.params["F"] * self.params["L_n"]) * (1 - self.params["t_plus"]))
+        right[idx_Lp] -= (i_app[idx_Lp] / (self.params["F"] * self.params["L_p"]) * (1 - self.params["t_plus"]))
 
         return left - right
 
@@ -375,5 +429,5 @@ class Electrolyte(PINN):
         :return: Model response to input data
         """
         u = self.model(x)
-        u = x[:, 0] * u.flatten() + 1.
+        u = x[:, 0] * u.flatten() + (-0.5 * x[:,1] + 1.5)
         return u

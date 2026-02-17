@@ -50,7 +50,6 @@ def store_and_print(path, j, PINN):
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
-    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Discharge at 1C for 100000 seconds or until 2.5 V"])
@@ -86,7 +85,6 @@ def store_and_print(path, j, PINN):
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
-    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])
@@ -120,11 +118,38 @@ if __name__ == "__main__":
 
     EPOCH = 50000
 
+    # if sys.argv[1] is not None:
+    #     dt_p = float(sys.argv[1])
+    # else:
+    #     dt_p = 1.
+    #
+    # if sys.argv[2] is not None:
+    #     dt_n = float(sys.argv[2])
+    # else:
+    #     dt_n = 1.
+    dt_p = 1.
+    dt_n = 1.
+
+    foldername = "CC_dtp" + str(dt_p) + "_dtn" + str(dt_n) + "_"
+
     parameters = load_params()
-    parameters["SOL_p"] = [0.8599, 0.2719]
-    parameters["SOL_n"] = [0.0339, 0.9742]
-    parameters["D_p"] = 5.57979526e-13  # 1.64852539e-14
-    parameters["D_n"] = 1.91909180e-15
+    # parameters["SOL_p"] = [0.8599, 0.2719]
+    # parameters["SOL_n"] = [0.0339, 0.9742]
+    parameters["SOL_n"] =  [0.0312, 0.8781] # [0.0263473, 0.91061212],
+    parameters["SOL_p"] = [0.9458, 0.2715] # [0.9332, 0.252], # [0.854399, 0.2638]
+    parameters["D_p"] = 1.22679499e-15  # 1.64852539e-14
+    parameters["D_n"] = 1.46457550e-15
+    parameters["as_p"] *= 7.555631166180735/8.7323 * dt_p
+    parameters["eps_p"] *= 7.555631166180735/8.7323 * dt_p
+    parameters["as_n"] *= 6.014505825096271/5.8276 * dt_n
+    parameters["eps_n"] *= 6.014505825096271/5.8276 * dt_n
+    print("pos eps: ", parameters["eps_p"], "\t\tneg eps: ", parameters["eps_n"])
+
+    param = pybamm.ParameterValues("Chen2020")
+    param["Positive electrode active material volume fraction"] = parameters["eps_p"]
+    param["Negative electrode active material volume fraction"] = parameters["eps_n"]
+    param["Positive electrode diffusivity [m2.s-1]"] = parameters["D_p"]
+    param["Negative electrode diffusivity [m2.s-1]"] = parameters["D_n"]
 
     training_points = {"PDE": {"type": "PDE", "N": 1000},
                        "IV": {"type": "IV", "N": 100},
@@ -172,7 +197,7 @@ if __name__ == "__main__":
     # Define the directory where you want to create the folder
     directory = '../models/'
     current_date = datetime.now().strftime('%Y-%m-%d_%H-%M')
-    folder_path = os.path.join(directory, current_date)
+    folder_path = os.path.join(directory, foldername + current_date)
     os.makedirs(folder_path, exist_ok=True)
 
     # print("Iter \t\t PDE \t BC Centre \t BC Surf \t\t\t PDE \t BC Centre \t BC Surf")
@@ -257,7 +282,7 @@ if __name__ == "__main__":
                 tqdm.write(f"Val loss: {loss_tot_val:.3E}\033[0m")
                 tqdm.write(f"\n")
 
-                store_and_print(folder_path, j, PINN)
+                # store_and_print(folder_path, j, PINN)
 
             pbar.update(1)
 
@@ -330,7 +355,6 @@ if __name__ == "__main__":
 
     V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
 
-    param = pybamm.ParameterValues("Chen2020")
     PBM_model = pybamm.lithium_ion.SPM()
 
     experiment = pybamm.Experiment(["Charge at 1C for 100000 seconds or until 4.2 V"])

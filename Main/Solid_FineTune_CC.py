@@ -11,10 +11,11 @@ import numpy as np
 import time
 import pickle as pkl
 import os
+import scienceplots
 
 import matplotlib.pyplot as plt
 
-np.set_printoptions(precision=3)
+# np.set_printoptions(precision=3)
 device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
 print("Device: ", device, "\n")
 # print(torch.get_num_threads())
@@ -60,8 +61,8 @@ def plot_voltage_components(solution, PINN, samples):
 
 if __name__ == "__main__":
 
-    dr_p = 1.1
-    dr_n = 0.75
+    dr_p = 1.
+    dr_n = 0.8
     dr_Dp = 1.
     dr_Dn = 1.
 
@@ -69,12 +70,12 @@ if __name__ == "__main__":
 
     crate = -1.
 
-    file = "2024-10-28_09-14"
+    file = "2025-03-07_16-00"
     iter = ""
     if iter != "":
-        fold = os.path.join("..\\models", file, iter)
+        fold = os.path.join("../models", file, iter)
     else:
-        fold = os.path.join("..\\models", file)
+        fold = os.path.join("../models", file)
 
     # Run PyBaMM simulation
     param = pybamm.ParameterValues("Chen2020")
@@ -106,8 +107,8 @@ if __name__ == "__main__":
 
     parameters = load_params()
     # Pybamm takes stechiometric coefficients differently, so we need to adjust the parameters
-    parameters["SOL_p"][0] = c_p_pbm[0]
-    parameters["SOL_n"][0] = c_n_pbm[0]
+    # parameters["SOL_p"][0] = c_p_pbm[0]
+    # parameters["SOL_n"][0] = c_n_pbm[0]
     eps_p_0 = parameters["eps_p"]
     eps_n_0 = parameters["eps_n"]
     D_p_0 = parameters["D_p"]
@@ -140,6 +141,26 @@ if __name__ == "__main__":
     PINN.pos_model.weights = weights["P"]
     PINN.neg_model.weights = weights["N"]
 
+    cur_fun = constant(-1)
+    PINN.neg_model.params["SOC_0"] = 0.
+    PINN.pos_model.params["SOC_0"] = 0.
+
+    pinn_sample_t_0 = torch.linspace(0, 1, 1000)
+    pinn_sample_r = torch.ones_like(pinn_sample_t_0)
+    pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t_0.numpy() * 3600.))
+    pinn_sample = torch.stack([pinn_sample_t_0, pinn_sample_r, pinn_sample_I]).t()
+
+    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
+
+    V_pinn_0 = PINN.compute_V((pinn_sample, N))
+    c_p_0 = PINN.pos_model((pinn_sample, N))
+    c_n_0 = PINN.neg_model((pinn_sample, N))
+
+    t_pinn_0 = pinn_sample_t_0.detach().numpy()
+    V_pinn_0 = V_pinn_0.detach().numpy()
+    t_pinn_0 = t_pinn_0[V_pinn_0 < 4.2]
+    V_pinn_0 = V_pinn_0[V_pinn_0 < 4.2]
+
     PINN.pos_model.model.freeze_general_model()
     PINN.neg_model.model.freeze_general_model()
 
@@ -158,31 +179,17 @@ if __name__ == "__main__":
     PINN.neg_model.params["D_n"] = torch.nn.Parameter(data=torch.tensor(parameters["D_n"]))
     optimizer_param_Dn = torch.optim.Adam([PINN.neg_model.params["D_n"]], lr=20. * parameters["D_n"])
 
+    parameters["SOL_p"][0] = c_p_pbm[0]
+    parameters["SOL_n"][0] = c_n_pbm[0]
+
     # as_n = torch.nn.Parameter(data=torch.tensor(parameters["as_n"]))
     # optimizer_param = torch.optim.Adam([as_n], lr=1e10)
 
     # Sampler = Sampler(training_points, constant(1.), mode="uniform")
     Sampler = Sampler_DONet(training_points, constant(crate), branch_samp=360, mode="quasi", device=device)
 
-    cur_fun = constant(crate)
-
     print("Target P: ", PINN.pos_model.params["as_p"].detach().numpy() * dr_p * parameters["R_p"] / 3.)
     print("Target N: ", PINN.neg_model.params["as_n"].detach().numpy() * dr_n * parameters["R_n"] / 3.)
-
-    PINN.neg_model.params["SOC_0"] = 0.
-    PINN.pos_model.params["SOC_0"] = 0.
-
-    pinn_sample_t_0 = torch.linspace(0, 1, 100)
-    pinn_sample_r = torch.ones_like(pinn_sample_t_0)
-    pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t_0.numpy() * 3600.))
-    pinn_sample = torch.stack([pinn_sample_t_0, pinn_sample_r, pinn_sample_I]).t()
-
-    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
-
-    V_pinn_0 = PINN.compute_V((pinn_sample, N))
-    c_p_0 = PINN.pos_model((pinn_sample, N))
-    c_n_0 = PINN.neg_model((pinn_sample, N))
-    t_pinn_0 = pinn_sample_t_0.detach().numpy()
 
     # plot_voltage_components(solution, PINN, (pinn_sample, N))
 
@@ -255,59 +262,59 @@ if __name__ == "__main__":
 
     print(time.time() - start)
 
-    plt.figure()
-    plt.grid()
-    plt.plot(range(iterations + 1), eps_n, "r-", label="eps_n")
-    plt.plot(0, eps_n_0, 'rD')
-    plt.axhline(y=eps_n_0 * dr_n, color='r', linestyle='--', label="eps_n target")
-    plt.plot(range(iterations + 1), eps_p, "g-", label="eps_p")
-    plt.plot(0, eps_p_0, 'gD')
-    plt.axhline(y=eps_p_0 * dr_p, color='g', linestyle='--', label="eps_p target")
-    plt.legend()
-    plt.ylim([0.3, 0.9])
-    plt.xlabel("Iteration")
-    plt.ylabel("eps")
-    plt.show()
+    print(eps_p[-1], eps_n[-1])
+    print((eps_p[-1]-eps_p_0*dr_p)/(eps_p_0*dr_p), (eps_n[-1]-eps_n_0*dr_n)/(eps_n_0*dr_n))
+    print((eps_p[-1] - eps_p_0 * dr_p), (eps_n[-1] - eps_n_0 * dr_n))
+
+    with plt.style.context(['science', 'ieee']):
+
+        plt.figure(figsize=(2.2,1.66))
+        # plt.grid()
+        plt.plot(range(iterations + 1), eps_p, color='#ff8c00', label="$\epsilon_p$")
+        plt.plot(0, eps_p_0, 'D', color='#ff8c00')
+        plt.axhline(y=eps_p_0 * dr_p, color='#ff8c00', linestyle='--', label="$\epsilon_p$ target")
+        plt.plot(range(iterations + 1), eps_n, "b-", label="$\epsilon_n$")
+        plt.plot(0, eps_n_0, 'bD')
+        plt.axhline(y=eps_n_0 * dr_n, color='b', linestyle='--', label="$\epsilon_n$ target")
+        plt.legend(ncol=2)
+        plt.ylim([0.3, 0.9])
+        plt.xlabel("Iteration")
+        plt.ylabel("$\epsilon$ [-]")
+        plt.savefig(os.path.join("../eval/Paper_results", "upd_epsp" + str(dr_p) + "epsn" + str(dr_n) + ".svg"), format="svg")
+        plt.savefig(os.path.join("../eval/Paper_results",  "upd_epsp" + str(dr_p) + "epsn" + str(dr_n) + ".pdf"), format="pdf")
+        plt.show()
 
     # Plot D_n and D_p with semi-log scale in y
-    plt.figure()
-    plt.grid()
-    plt.semilogy(range(iterations + 1), D_n, "m-", label="D_n")
-    plt.plot(0, D_n_0, 'mD')
-    plt.axhline(y=D_n_0 * dr_Dn, color='m', linestyle='--', label="D_n target")
-    plt.semilogy(range(iterations + 1), D_p, "c-", label="D_p")
-    plt.plot(0, D_p_0, 'cD')
-    plt.axhline(y=D_p_0 * dr_Dp, color='c', linestyle='--', label="D_p target")
-    plt.legend()
-    plt.xlabel("Iteration")
-    plt.ylabel("D [m2.s-1]")
-    plt.show()
 
-    plt.figure()
-    plt.grid()
-    plt.plot(t_points / 3600., V_pbm.detach().numpy(), "r-", label="PyBaMM")
-    plt.plot(pinn_sample_t_0.detach().numpy(), V_pinn_0.detach().numpy(), "k--", label="PINN_0")
-    plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "k-", label="PINN")
-    plt.legend()
-    plt.xlabel("t [h]")
-    plt.ylabel("V [V]")
-    plt.show()
+    with plt.style.context(['science', 'ieee']):
+
+        plt.figure(figsize=(2.2,1.66))
+        plt.plot(t_points / 3600., V_pbm.detach().numpy(), "k-", label="PyBaMM")
+        plt.plot(t_pinn_0, V_pinn_0, "r:", label="PINN_0")
+        plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "r--", label="PINN")
+        plt.legend()
+        plt.xlabel("Time [h]")
+        plt.ylabel("Voltage [V]")
+        plt.ylim([2.5, 4.2])
+        plt.savefig(os.path.join("../eval/Paper_results", "V_epsp" + str(dr_p) + "epsn" + str(dr_n) + ".svg"), format="svg")
+        plt.savefig(os.path.join("../eval/Paper_results", "V_epsp" + str(dr_p) + "epsn" + str(dr_n) + ".pdf"), format="pdf")
+        plt.show()
 
     # Plot concentrations after training
 
     # PINN concentrations
-    c_p = PINN.pos_model((pinn_sample, N))
-    c_n = PINN.neg_model((pinn_sample, N))
-    # Plot PBM and PINN concentrations
-    plt.figure()
-    plt.grid()
-    plt.plot(t_pbm / 3600., c_p_pbm, "r-", label="P PyBaMM")
-    plt.plot(pinn_sample_t.detach().numpy(), c_p.detach().numpy(), "r--", label="P PINN")
-    plt.plot(t_pinn_0, c_p_0.detach().numpy(), "r:", label="P PINN_0")
-    plt.plot(t_pbm / 3600., c_n_pbm, "b-", label="N PyBaMM")
-    plt.plot(pinn_sample_t.detach().numpy(), c_n.detach().numpy(), "b--", label="N PINN")
-    plt.plot(t_pinn_0, c_n_0.detach().numpy(), "b:", label="N PINN_0")
-    plt.legend()
-    plt.xlabel("t [h]")
-    plt.ylabel("c_p [mol.m-3]")
-    plt.show()
+    # c_p = PINN.pos_model((pinn_sample, N))
+    # c_n = PINN.neg_model((pinn_sample, N))
+    # # Plot PBM and PINN concentrations
+    # plt.figure()
+    # plt.grid()
+    # plt.plot(t_pbm / 3600., c_p_pbm, "r-", label="P PyBaMM")
+    # plt.plot(pinn_sample_t.detach().numpy(), c_p.detach().numpy(), "r--", label="P PINN")
+    # plt.plot(t_pinn_0, c_p_0.detach().numpy(), "r:", label="P PINN_0")
+    # plt.plot(t_pbm / 3600., c_n_pbm, "b-", label="N PyBaMM")
+    # plt.plot(pinn_sample_t.detach().numpy(), c_n.detach().numpy(), "b--", label="N PINN")
+    # plt.plot(t_pinn_0, c_n_0.detach().numpy(), "b:", label="N PINN_0")
+    # plt.legend()
+    # plt.xlabel("t [h]")
+    # plt.ylabel("c_p [mol.m-3]")
+    # plt.show()

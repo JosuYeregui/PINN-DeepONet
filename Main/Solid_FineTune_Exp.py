@@ -11,6 +11,7 @@ import numpy as np
 import time
 import pickle as pkl
 import os
+import scienceplots
 
 import matplotlib.pyplot as plt
 
@@ -41,32 +42,32 @@ if __name__ == "__main__":
     crate = -0.3
     SoC_0 = 0.
 
-    dt_p = 1.25
-    dt_n = 0.75
+    dt_p = 1.
+    dt_n = 1.
 
     # file = "2024-12-09_13-53"
-    file = "CC_dtp1.25_dtn0.75_2024-12-10_17-04"
+    file = "CC_dtp1.0_dtn1.0_2025-03-19_00-44"
     iter = ""
     if iter != "":
         fold = os.path.join("..\\models", file, iter)
     else:
         fold = os.path.join("..\\models", file)
 
-    V, t = load_excel(os.path.join("..\\Data\\BoL_PINN_Channel_7_Wb_1.xlsx"), "7")
+    V, t = load_excel(os.path.join("..\\Data\\Aged_PINN_Channel_6_Wb_1.xlsx"), "6")
 
     # PybaMM concentrations
 
 
     parameters = load_params()
 
-    # parameters["SOL_p"] = [0.8599, 0.2719]
-    # parameters["SOL_n"] = [0.0339, 0.9742]
+    parameters["SOL_p"] = [0.8599, 0.2719]
+    parameters["SOL_n"] = [0.0339, 0.9742]
     parameters["D_p"] = 1.22679499e-15  # 1.64852539e-14
     parameters["D_n"] = 1.46457550e-15
-    parameters["as_p"] *= 7.555631166180735 / 8.7323 * dt_p
-    parameters["eps_p"] *= 7.555631166180735 / 8.7323 * dt_p
-    parameters["as_n"] *= 6.014505825096271 / 5.8276 * dt_n
-    parameters["eps_n"] *= 6.014505825096271 / 5.8276 * dt_n
+    parameters["as_p"] *= 7.555631166180735 / 8.7323 # * dt_p
+    parameters["eps_p"] *= 7.555631166180735 / 8.7323 # * dt_p
+    parameters["as_n"] *= 6.014505825096271 / 5.8276 # * dt_n
+    parameters["eps_n"] *= 6.014505825096271 / 5.8276 # * dt_n
     # Pybamm takes stechiometric coefficients differently, so we need to adjust the parameters
     eps_p_0 = parameters["eps_p"]
     eps_n_0 = parameters["eps_n"]
@@ -134,8 +135,8 @@ if __name__ == "__main__":
     tar_eps_p = PINN.neg_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3. * (1 - 0.058756)
     tar_eps_n = PINN.pos_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3. * (1 - 0.26054)
 
-    tar_eps_p = parameters["eps_p"] / dt_p
-    tar_eps_n = parameters["eps_n"] / dt_n
+    # tar_eps_p = parameters["eps_p"] / dt_p
+    # tar_eps_n = parameters["eps_n"] / dt_n
 
     print("Target P: ", tar_eps_p)
     print("Target N: ", tar_eps_n)
@@ -216,7 +217,7 @@ if __name__ == "__main__":
         optimizer_p.step()
         optimizer_param_n.step()
         optimizer_param_p.step()
-        # optimizer_param_p_S.step()
+        optimizer_param_p_S.step()
         # optimizer_param_Dp.step()
         # optimizer_param_Dn.step()
 
@@ -249,19 +250,37 @@ if __name__ == "__main__":
 
     print(time.time() - start)
 
-    plt.figure()
-    plt.grid()
-    plt.plot(range(iterations + 1), eps_n, "r-", label="eps_n")
-    plt.plot(0, eps_n_0, 'rD')
-    plt.axhline(y=tar_eps_n, color='r', linestyle='--', label="eps_n target")
-    plt.plot(range(iterations + 1), eps_p, "g-", label="eps_p")
-    plt.plot(0, eps_p_0, 'gD')
-    plt.axhline(y=tar_eps_p, color='g', linestyle='--', label="eps_p target")
-    plt.legend()
-    plt.ylim([0.3, 0.9])
-    plt.xlabel("Iteration")
-    plt.ylabel("eps")
-    plt.show()
+    # plt.figure()
+    # plt.grid()
+    # plt.plot(range(iterations + 1), eps_n, "r-", label="eps_n")
+    # plt.plot(0, eps_n_0, 'rD')
+    # plt.axhline(y=tar_eps_n, color='r', linestyle='--', label="eps_n target")
+    # plt.plot(range(iterations + 1), eps_p, "g-", label="eps_p")
+    # plt.plot(0, eps_p_0, 'gD')
+    # plt.axhline(y=tar_eps_p, color='g', linestyle='--', label="eps_p target")
+    # plt.legend()
+    # plt.ylim([0.3, 0.9])
+    # plt.xlabel("Iteration")
+    # plt.ylabel("eps")
+    # plt.show()
+
+    with plt.style.context(['science', 'ieee']):
+
+        plt.figure()
+        # plt.grid()
+        plt.plot(range(iterations + 1), eps_p, color='#ff8c00', label="$\epsilon_p$")
+        plt.plot(0, eps_p_0, 'D', color='#ff8c00')
+        plt.axhline(y=tar_eps_p, color='#ff8c00', linestyle='--', label="$\epsilon_p$ target")
+        plt.plot(range(iterations + 1), eps_n, "b-", label="$\epsilon_n$")
+        plt.plot(0, eps_n_0, 'bD')
+        plt.axhline(y=tar_eps_n, color='b', linestyle='--', label="$\epsilon_n$ target")
+        plt.legend(ncol=2)
+        plt.ylim([0.3, 0.9])
+        plt.xlabel("Iteration")
+        plt.ylabel("$\epsilon$ [-]")
+        plt.savefig(os.path.join("../eval/Paper_results", "upd_epsp_exp.svg"), format="svg")
+        plt.savefig(os.path.join("../eval/Paper_results",  "upd_epsp_exp.pdf"), format="pdf")
+        plt.show()
 
     plt.figure()
     plt.grid()
@@ -273,15 +292,29 @@ if __name__ == "__main__":
     plt.show()
 
 
-    plt.figure()
-    plt.grid()
-    plt.plot(t_points / 3600., V_pbm.detach().numpy(), "r-", label="PyBaMM")
-    plt.plot(t_pinn_0, V_pinn_0.detach().numpy(), "k--", label="PINN_0")
-    plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "k-", label="PINN")
-    plt.legend()
-    plt.xlabel("t [h]")
-    plt.ylabel("V [V]")
-    plt.show()
+    # plt.figure()
+    # plt.grid()
+    # plt.plot(t_points / 3600., V_pbm.detach().numpy(), "r-", label="PyBaMM")
+    # plt.plot(t_pinn_0, V_pinn_0.detach().numpy(), "k--", label="PINN_0")
+    # plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "k-", label="PINN")
+    # plt.legend()
+    # plt.xlabel("t [h]")
+    # plt.ylabel("V [V]")
+    # plt.show()
+
+    with plt.style.context(['science', 'ieee']):
+
+        plt.figure()
+        plt.plot(t_points / 3600., V_pbm.detach().numpy(), "k-", label="Experimental")
+        plt.plot(t_pinn_0, V_pinn_0.detach().numpy(), "r:", label="PINN_0")
+        plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "r--", label="PINN")
+        plt.legend()
+        plt.xlabel("Time [h]")
+        plt.ylabel("Voltage [V]")
+        plt.ylim([2.5, 4.2])
+        plt.savefig(os.path.join("../eval/Paper_results", "V_exp.svg"), format="svg")
+        plt.savefig(os.path.join("../eval/Paper_results", "V_exp.pdf"), format="pdf")
+        plt.show()
 
     # Plot concentrations before and after training
     c_p = PINN.pos_model((pinn_sample, N))

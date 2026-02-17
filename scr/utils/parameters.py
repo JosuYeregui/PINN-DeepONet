@@ -3,6 +3,9 @@ import pybamm
 import numpy as np
 
 def load_params():
+    """
+    Loads the parameters for the battery model from the Chen2020 dataset.
+    """
     param = pybamm.ParameterValues("Chen2020")
 
     parameters = {
@@ -42,8 +45,8 @@ def load_params():
         "D_e_const": 1.7694e-10,#4.862e-10,
         "sigma_e": lambda c: 0.1297 * torch.pow(c, 3) - 2.51 * torch.pow(c, 1.5) + 3.329 * c,
         "brug": 1.5,
-        "SOL_n": [0.0312, 0.8781], # [0.0263473, 0.91061212],
-        "SOL_p": [0.9458, 0.2715], # [0.9332, 0.252], # [0.854399, 0.2638]
+        "SOL_n": [0.0263473, 0.91061212],
+        "SOL_p": [0.854399, 0.2638],
         "F": 96485.33212,
         "R": 8.314462,
         "T": 298.15,
@@ -51,3 +54,7 @@ def load_params():
         "m_ref_n": 6.48e-7
     }
     return parameters
+
+if __name__ == "__main__":
+    params = load_params()
+    print(params)

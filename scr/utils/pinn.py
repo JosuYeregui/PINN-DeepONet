@@ -306,7 +306,7 @@ class DeepONet_TL_FF(nn.Module):
     relatively small dataset
     """
     def __init__(self, branch_layers, trunk_layers, fine_layers, dim_branch, dim_trunk, dim_int, dim_out,
-                 sigmas_fourier=None, activation=nn.Tanh, dropout=0.):
+                 sigmas_fourier=None, activation=nn.Tanh, dropout=0., bypass=False):
         super(DeepONet_TL_FF, self).__init__()
 
         self.activation = activation()
@@ -317,9 +317,18 @@ class DeepONet_TL_FF(nn.Module):
 
         self.fine = FFNN(fine_layers, dim_int, dim_out, activation=activation, dropout=dropout)
 
+        # Fourier encoding
         self.b_values = [torch.randn((dim_trunk, trunk_layers[0] // 2)) * s for s in sigmas_fourier]
         self.trunk = [FFNN(trunk_layers[:-1], trunk_layers[0], trunk_layers[-1], activation=activation, dropout=dropout) for _ in range(len(sigmas_fourier))]
-        self.trunk_dense = nn.Linear(trunk_layers[-1] * len(sigmas_fourier), dim_int)
+        # self.trunk = [FFNN(trunk_layers[:-1], trunk_layers[0], dim_int, activation=activation, dropout=dropout) for _ in range(len(sigmas_fourier))]
+
+        if bypass:
+            self.trunk_wo_sigma = FFNN(trunk_layers[:-1], dim_trunk, trunk_layers[-1], activation=activation,
+                                       dropout=dropout)
+            self.trunk_dense = nn.Linear(trunk_layers[-1] * (len(sigmas_fourier) + 1), dim_int)
+        else:
+            self.trunk_wo_sigma = None
+            self.trunk_dense = nn.Linear(trunk_layers[-1] * len(sigmas_fourier), dim_int)
 
     def forward(self, x):
         """
@@ -329,12 +338,16 @@ class DeepONet_TL_FF(nn.Module):
         """
         # Forward passes the Trunk net
         out_T = []
+        if self.trunk_wo_sigma is not None:
+            out_T.append(self.trunk_wo_sigma.activation(self.trunk_wo_sigma(x[0])))
         for b, t in zip(self.b_values, self.trunk):
             fourier_encode = 2 * np.pi * x[0] @ b
             t_encode = torch.cat([torch.sin(fourier_encode), torch.cos(fourier_encode)], dim=-1)
             out_T.append(t.activation(t(t_encode)))
         out_T = torch.cat(out_T, dim=-1)
         out_T = self.activation(self.trunk_dense(out_T))
+        # multiply all elements of the trunk networks
+        #out_T = torch.prod(torch.stack(out_T), dim=0)
         # Forward passes the Branch net
         out_B = self.branch.activation(self.branch(x[1]))
 
