@@ -26,10 +26,11 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+DEVICE = "auto"  # "cpu" | "cuda" | "auto"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if DEVICE == "auto" else torch.device(DEVICE)
 print("Device: ", device, "\n")
-# print(torch.get_num_threads())
-torch.set_num_threads(1)
+if device.type == "cpu":
+    torch.set_num_threads(torch.get_num_threads())
 
 import pybamm
 import numpy as np
@@ -74,16 +75,16 @@ def simulate_spm_pinn(profile_name):
     t = t / 3600.
 
     # ---- PINN ---- #
-    bcs_sample_t = torch.linspace(0., 1., 3600)
-    N = torch.tensor(current_function(bcs_sample_t.numpy() * 3600., profile_name))
+    bcs_sample_t = torch.linspace(0., 1., 3600, device=device)
+    N = torch.tensor(current_function(bcs_sample_t.cpu().numpy() * 3600., profile_name), dtype=torch.float32, device=device)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
-    bcs_sample_I = torch.tensor(current_function(bcs_sample_t.numpy() * 3600., profile_name))
+    bcs_sample_I = torch.tensor(current_function(bcs_sample_t.cpu().numpy() * 3600., profile_name), dtype=torch.float32, device=device)
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
     c_bcs = PINN.pos_model((bcs_sample, N))
 
     plt.figure()
     plt.grid(True)
-    plt.plot(bcs_sample_t.detach().numpy() * PINN.pos_model.tc / 3600., c_bcs.detach().numpy(), "k", label="PINN")
+    plt.plot(bcs_sample_t.detach().cpu().numpy() * PINN.pos_model.tc / 3600., c_bcs.detach().cpu().numpy(), "k", label="PINN")
     plt.plot(t, pos_SPM_r1, "r", label="Pybamm")
     plt.legend()
     plt.xlabel("Tiempo [h]")
@@ -91,28 +92,28 @@ def simulate_spm_pinn(profile_name):
     plt.show()
 
     num = 1000
-    t_test = (torch.arange(0, num, dtype=torch.float, requires_grad=True) / num)[::10]
-    r_rand = (torch.arange(0, num, dtype=torch.float, requires_grad=True) / num)[::10]
+    t_test = (torch.arange(0, num, dtype=torch.float, device=device, requires_grad=True) / num)[::10]
+    r_rand = (torch.arange(0, num, dtype=torch.float, device=device, requires_grad=True) / num)[::10]
 
     t_new, r_new = torch.meshgrid(t_test, r_rand)
-    pos = np.zeros_like(t_new.detach().numpy())
-    pos_dcdt = np.zeros_like(t_new.detach().numpy())
-    pos_dcdr = np.zeros_like(t_new.detach().numpy())
+    pos = np.zeros_like(t_new.detach().cpu().numpy())
+    pos_dcdt = np.zeros_like(t_new.detach().cpu().numpy())
+    pos_dcdr = np.zeros_like(t_new.detach().cpu().numpy())
 
     for i, (t, r) in enumerate(zip(t_new, r_new)):
-        cur = torch.tensor(current_function(t.detach().numpy() * 3600., profile_name))
+        cur = torch.tensor(current_function(t.detach().cpu().numpy() * 3600., profile_name), dtype=torch.float32, device=device)
         sample = (torch.stack((t, r, cur)).t(), N)
         residuals = PINN.pos_model.compute_residuals(sample)
-        pos[i, :] = np.abs(residuals.detach().numpy())
+        pos[i, :] = np.abs(residuals.detach().cpu().numpy())
         gradients = PINN.pos_model.compute_gradients(sample)
-        pos_dcdt[i, :] = np.abs(gradients[:, 0].detach().numpy())
-        pos_dcdr[i, :] = np.abs(gradients[:, 1].detach().numpy())
+        pos_dcdt[i, :] = np.abs(gradients[:, 0].detach().cpu().numpy())
+        pos_dcdr[i, :] = np.abs(gradients[:, 1].detach().cpu().numpy())
 
     def plot_area(points, style, cmap_label):
         plt.subplots(figsize=(7, 3), tight_layout=True)
-        plot = plt.pcolormesh(t_new.detach().numpy(), r_new.detach().numpy(), points, cmap=style, shading='gouraud')
+        plot = plt.pcolormesh(t_new.detach().cpu().numpy(), r_new.detach().cpu().numpy(), points, cmap=style, shading='gouraud')
         cbar = plt.colorbar(plot)
-        plt.contour(t_new.detach().numpy(), r_new.detach().numpy(), points, 10, colors='gray')
+        plt.contour(t_new.detach().cpu().numpy(), r_new.detach().cpu().numpy(), points, 10, colors='gray')
         plt.ylabel('$x$')
         plt.xlabel('$t$ [h]')
         cbar.set_label(cmap_label)
@@ -124,21 +125,21 @@ def simulate_spm_pinn(profile_name):
 
 
 def plot_pybamm_vs_PINN(cur_func, SOC, PINN, folder_path, name, plot=False):
-    bcs_sample_t = torch.linspace(0., 1., 1000)
+    bcs_sample_t = torch.linspace(0., 1., 1000, device=device)
     bcs_sample_r = torch.ones_like(bcs_sample_t)
-    bcs_sample_I = torch.tensor(cur_func(bcs_sample_t.numpy()))
+    bcs_sample_I = torch.tensor(cur_func(bcs_sample_t.cpu().numpy()), dtype=torch.float32, device=device)
     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_r, bcs_sample_I]).t()
 
     # if isinstance(cur_func, GRF):
     #     print(np.mean(cur_func.u))
 
-    N = torch.tensor(cur_func(np.linspace(0., 1, 3600)))
+    N = torch.tensor(cur_func(np.linspace(0., 1, 3600)), dtype=torch.float32, device=device)
     PINN.neg_model.params["SOC_0"] = SOC
     PINN.pos_model.params["SOC_0"] = SOC
 
-    V_pinn = PINN.compute_V((bcs_sample, N)).detach().numpy()
+    V_pinn = PINN.compute_V((bcs_sample, N)).detach().cpu().numpy()
 
-    t_eval = bcs_sample_t.detach().numpy() * 3600.
+    t_eval = bcs_sample_t.detach().cpu().numpy() * 3600.
 
     # cur_func_pybamm = lambda t: cur_func(t.numpy())
     cur_func_pybamm = pybamm.Interpolant(t_eval, cur_func(t_eval / 3600.) * param["Nominal cell capacity [A.h]"],
@@ -173,7 +174,7 @@ def plot_pybamm_vs_PINN(cur_func, SOC, PINN, folder_path, name, plot=False):
     # Plot the current profile
     plt.figure()
     plt.grid()
-    plt.plot(bcs_sample_t.detach().numpy(), bcs_sample_I.detach().numpy(), "b-")
+    plt.plot(bcs_sample_t.detach().cpu().numpy(), bcs_sample_I.detach().cpu().numpy(), "b-")
     plt.xlabel("time [h]")
     plt.ylabel("I [A]")
     plt.savefig(os.path.join(folder_path, name + "_I.png"))

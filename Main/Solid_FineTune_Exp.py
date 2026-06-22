@@ -16,10 +16,11 @@ import scienceplots
 import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+DEVICE = "auto"  # "cpu" | "cuda" | "auto"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if DEVICE == "auto" else torch.device(DEVICE)
 print("Device: ", device, "\n")
-# print(torch.get_num_threads())
-torch.set_num_threads(1)
+if device.type == "cpu":
+    torch.set_num_threads(torch.get_num_threads())
 
 
 def RMSELoss(yhat, y):
@@ -108,20 +109,20 @@ if __name__ == "__main__":
 
     optimizer_n = torch.optim.Adam(PINN.neg_model.model.parameters(), lr=0.00001)
 
-    PINN.neg_model.params["as_n"] = torch.nn.Parameter(data=torch.tensor(parameters["as_n"]))
+    PINN.neg_model.params["as_n"] = torch.nn.Parameter(data=torch.tensor(parameters["as_n"], device=device))
     optimizer_param_n = torch.optim.Adam([PINN.neg_model.params["as_n"]], lr=0.001 * parameters["as_n"])
 
     optimizer_p = torch.optim.Adam(PINN.pos_model.model.parameters(), lr=0.00001)
 
-    PINN.pos_model.params["as_p"] = torch.nn.Parameter(data=torch.tensor(parameters["as_p"]))
+    PINN.pos_model.params["as_p"] = torch.nn.Parameter(data=torch.tensor(parameters["as_p"], device=device))
     optimizer_param_p = torch.optim.Adam([PINN.pos_model.params["as_p"]], lr=0.001 * parameters["as_p"])
 
-    PINN.pos_model.params["SOL_p"][0] = torch.nn.Parameter(data=torch.tensor(parameters["SOL_p"][0]))
+    PINN.pos_model.params["SOL_p"][0] = torch.nn.Parameter(data=torch.tensor(parameters["SOL_p"][0], device=device))
     optimizer_param_p_S = torch.optim.Adam([PINN.pos_model.params["SOL_p"][0]], lr=0.0001 * parameters["SOL_p"][0])
 
-    PINN.pos_model.params["D_p"] = torch.nn.Parameter(data=torch.tensor(parameters["D_p"]))
+    PINN.pos_model.params["D_p"] = torch.nn.Parameter(data=torch.tensor(parameters["D_p"], device=device))
     optimizer_param_Dp = torch.optim.Adam([PINN.pos_model.params["D_p"]], lr=1. * parameters["D_p"])
-    PINN.neg_model.params["D_n"] = torch.nn.Parameter(data=torch.tensor(parameters["D_n"]))
+    PINN.neg_model.params["D_n"] = torch.nn.Parameter(data=torch.tensor(parameters["D_n"], device=device))
     optimizer_param_Dn = torch.optim.Adam([PINN.neg_model.params["D_n"]], lr=1. * parameters["D_n"])
 
     # as_n = torch.nn.Parameter(data=torch.tensor(parameters["as_n"]))
@@ -132,8 +133,8 @@ if __name__ == "__main__":
 
     cur_fun = constant(crate)
 
-    tar_eps_p = PINN.neg_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3. * (1 - 0.058756)
-    tar_eps_n = PINN.pos_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3. * (1 - 0.26054)
+    tar_eps_p = PINN.neg_model.params["as_p"].detach().cpu().numpy() * parameters["R_p"] / 3. * (1 - 0.058756)
+    tar_eps_n = PINN.pos_model.params["as_n"].detach().cpu().numpy() * parameters["R_n"] / 3. * (1 - 0.26054)
 
     # tar_eps_p = parameters["eps_p"] / dt_p
     # tar_eps_n = parameters["eps_n"] / dt_n
@@ -144,22 +145,22 @@ if __name__ == "__main__":
     PINN.neg_model.params["SOC_0"] = SoC_0
     PINN.pos_model.params["SOC_0"] = SoC_0
 
-    pinn_sample_t_0 = torch.linspace(0, t[-1] / 3600., 100)
+    pinn_sample_t_0 = torch.linspace(0, t[-1] / 3600., 100, device=device)
     pinn_sample_r = torch.ones_like(pinn_sample_t_0)
-    pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t_0.numpy() * 3600.))
+    pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t_0.cpu().numpy() * 3600.), dtype=torch.float32, device=device)
     pinn_sample = torch.stack([pinn_sample_t_0, pinn_sample_r, pinn_sample_I]).t()
 
-    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
+    N = torch.tensor(cur_fun(np.arange(0., 3600, 10)), dtype=torch.float32, device=device)
 
     V_pinn_0 = PINN.compute_V((pinn_sample, N))
     c_p_0 = PINN.pos_model((pinn_sample, N))
     c_n_0 = PINN.neg_model((pinn_sample, N))
-    t_pinn_0 = pinn_sample_t_0.detach().numpy()
+    t_pinn_0 = pinn_sample_t_0.detach().cpu().numpy()
 
     # Plot V_pbm and V_pinn
     plt.figure()
     plt.grid()
-    plt.plot(t_pinn_0, V_pinn_0.detach().numpy(), "k-", label="PINN")
+    plt.plot(t_pinn_0, V_pinn_0.detach().cpu().numpy(), "k-", label="PINN")
     plt.plot(t/3600., V, "r-", label="Experimental")
     plt.legend()
     plt.xlabel("t [h]")
@@ -178,7 +179,7 @@ if __name__ == "__main__":
         PINN.pos_model.params["SOC_0"] = SoC_0
 
         t_points = np.sort(np.random.random(size=(1000, 1)) * t[-1], axis=0)
-        V_pbm = torch.asarray(np.interp(t_points, t, V), dtype=torch.float32, requires_grad=True).flatten()
+        V_pbm = torch.tensor(np.interp(t_points, t, V), dtype=torch.float32, device=device, requires_grad=True).flatten()
         # Check if there is a nan value in the V_pbm
 
         Sampler.update_samples(training_points, constant(crate), 1. / np.abs(crate))
@@ -186,15 +187,15 @@ if __name__ == "__main__":
         loss_n = PINN.neg_model.compute_loss(Sampler)
         loss_p = PINN.pos_model.compute_loss(Sampler)
 
-        loss_tot_n = torch.sum(loss_n * torch.tensor(PINN.neg_model.weights))
-        loss_tot_p = torch.sum(loss_p * torch.tensor(PINN.pos_model.weights))
+        loss_tot_n = torch.sum(loss_n * torch.tensor(PINN.neg_model.weights, device=device))
+        loss_tot_p = torch.sum(loss_p * torch.tensor(PINN.pos_model.weights, device=device))
 
-        pinn_sample_t = torch.asarray(t_points/3600., dtype=torch.float32).flatten()
+        pinn_sample_t = torch.tensor(t_points/3600., dtype=torch.float32, device=device).flatten()
         pinn_sample_r = torch.ones_like(pinn_sample_t)
-        pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t.numpy() * 3600.))
+        pinn_sample_I = torch.tensor(cur_fun(pinn_sample_t.cpu().numpy() * 3600.), dtype=torch.float32, device=device)
         pinn_sample = torch.stack([pinn_sample_t, pinn_sample_r, pinn_sample_I]).t()
 
-        N = torch.tensor(cur_fun(np.arange(0., 3600, 10)))
+        N = torch.tensor(cur_fun(np.arange(0., 3600, 10)), dtype=torch.float32, device=device)
 
         V_pinn = PINN.compute_V((pinn_sample, N))
 
@@ -222,11 +223,11 @@ if __name__ == "__main__":
         # optimizer_param_Dn.step()
 
         if j % 100 == 0:
-            print(j, "\t\t", V_error.detach().numpy(), "\t\t", loss_tot_n.detach().numpy(), "\t\t", loss_tot_p.detach().numpy(), "\t\t",
-                  PINN.pos_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3.,
-                  PINN.neg_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3.,
-                  PINN.pos_model.params["D_p"].detach().numpy(), PINN.neg_model.params["D_n"].detach().numpy(), "\t\t",
-                  PINN.pos_model.params["SOL_p"][0].detach().numpy(), "\t\t")
+            print(j, "\t\t", V_error.detach().cpu().numpy(), "\t\t", loss_tot_n.detach().cpu().numpy(), "\t\t", loss_tot_p.detach().cpu().numpy(), "\t\t",
+                  PINN.pos_model.params["as_p"].detach().cpu().numpy() * parameters["R_p"] / 3.,
+                  PINN.neg_model.params["as_n"].detach().cpu().numpy() * parameters["R_n"] / 3.,
+                  PINN.pos_model.params["D_p"].detach().cpu().numpy(), PINN.neg_model.params["D_n"].detach().cpu().numpy(), "\t\t",
+                  PINN.pos_model.params["SOL_p"][0].detach().cpu().numpy(), "\t\t")
                   # PINN.pos_model.params["as_p"].grad.detach().numpy(), PINN.neg_model.params["as_n"].grad.detach().numpy())
                   # torch.autograd.grad(V_error, PINN.pos_model.params["as_p"], retain_graph=True)[0].detach().numpy(),
                   # torch.autograd.grad(V_error, PINN.neg_model.params["as_n"], retain_graph=True)[0].detach().numpy())
@@ -243,10 +244,10 @@ if __name__ == "__main__":
             # plt.ylabel("V [V]")
             # plt.show()
 
-        eps_n.append(PINN.neg_model.params["as_n"].detach().numpy() * parameters["R_n"] / 3.)
-        eps_p.append(PINN.pos_model.params["as_p"].detach().numpy() * parameters["R_p"] / 3.)
-        D_n.append(PINN.neg_model.params["D_n"].detach().numpy() * 1.)
-        D_p.append(PINN.pos_model.params["D_p"].detach().numpy() * 1.)
+        eps_n.append(PINN.neg_model.params["as_n"].detach().cpu().numpy() * parameters["R_n"] / 3.)
+        eps_p.append(PINN.pos_model.params["as_p"].detach().cpu().numpy() * parameters["R_p"] / 3.)
+        D_n.append(PINN.neg_model.params["D_n"].detach().cpu().numpy() * 1.)
+        D_p.append(PINN.pos_model.params["D_p"].detach().cpu().numpy() * 1.)
 
     print(time.time() - start)
 
@@ -305,9 +306,9 @@ if __name__ == "__main__":
     with plt.style.context(['science', 'ieee']):
 
         plt.figure()
-        plt.plot(t_points / 3600., V_pbm.detach().numpy(), "k-", label="Experimental")
-        plt.plot(t_pinn_0, V_pinn_0.detach().numpy(), "r:", label="PINN_0")
-        plt.plot(pinn_sample_t.detach().numpy(), V_pinn.detach().numpy(), "r--", label="PINN")
+        plt.plot(t_points / 3600., V_pbm.detach().cpu().numpy(), "k-", label="Experimental")
+        plt.plot(t_pinn_0, V_pinn_0.detach().cpu().numpy(), "r:", label="PINN_0")
+        plt.plot(pinn_sample_t.detach().cpu().numpy(), V_pinn.detach().cpu().numpy(), "r--", label="PINN")
         plt.legend()
         plt.xlabel("Time [h]")
         plt.ylabel("Voltage [V]")
@@ -321,10 +322,10 @@ if __name__ == "__main__":
     c_n = PINN.neg_model((pinn_sample, N))
     plt.figure()
     plt.grid()
-    plt.plot(pinn_sample_t_0.detach().numpy(), c_p_0.detach().numpy(), "r--", label="c_p_0")
-    plt.plot(pinn_sample_t.detach().numpy(), c_p.detach().numpy(), "r-", label="c_p")
-    plt.plot(pinn_sample_t_0.detach().numpy(), c_n_0.detach().numpy(), "b--", label="c_n_0")
-    plt.plot(pinn_sample_t.detach().numpy(), c_n.detach().numpy(), "b-", label="c_n")
+    plt.plot(pinn_sample_t_0.detach().cpu().numpy(), c_p_0.detach().cpu().numpy(), "r--", label="c_p_0")
+    plt.plot(pinn_sample_t.detach().cpu().numpy(), c_p.detach().cpu().numpy(), "r-", label="c_p")
+    plt.plot(pinn_sample_t_0.detach().cpu().numpy(), c_n_0.detach().cpu().numpy(), "b--", label="c_n_0")
+    plt.plot(pinn_sample_t.detach().cpu().numpy(), c_n.detach().cpu().numpy(), "b-", label="c_n")
     plt.legend()
     plt.xlabel("t [h]")
     plt.ylabel("c [-]")
