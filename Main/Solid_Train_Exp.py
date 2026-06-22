@@ -135,8 +135,10 @@ if __name__ == "__main__":
     parameters = load_params()
     # parameters["SOL_p"] = [0.8599, 0.2719]
     # parameters["SOL_n"] = [0.0339, 0.9742]
-    parameters["SOL_n"] =  [0.0312, 0.8781] # [0.0263473, 0.91061212],
-    parameters["SOL_p"] = [0.9458, 0.2715] # [0.9332, 0.252], # [0.854399, 0.2638]
+    # parameters["SOL_n"] =  [0.0312, 0.8781] # [0.0263473, 0.91061212],
+    # parameters["SOL_p"] = [0.9458, 0.2715] # [0.9332, 0.252], # [0.854399, 0.2638]
+    parameters["SOL_p"] = [0.9083, 0.2755] #Modest
+    parameters["SOL_n"] = [0.0308, 0.7614]
     parameters["D_p"] = 1.22679499e-15  # 1.64852539e-14
     parameters["D_n"] = 1.46457550e-15
     parameters["as_p"] *= 7.555631166180735/8.7323 * dt_p
@@ -247,6 +249,7 @@ if __name__ == "__main__":
                 history["positive"]["losses_tr"].append(losses_tr)
                 history["positive"]["loss_val"].append(loss_tot_val)
                 history["positive"]["losses_val"].append(losses_val)
+                history["positive"]["weights"].append(np.array(PINN.pos_model.weights))
                 history["positive"]["iteration"].append(j)
 
                 tqdm.write(f"\033[3mIteration: {j}\033[0m")
@@ -271,6 +274,7 @@ if __name__ == "__main__":
                 history["negative"]["losses_tr"].append(losses_tr)
                 history["negative"]["loss_val"].append(loss_tot_val)
                 history["negative"]["losses_val"].append(losses_val)
+                history["negative"]["weights"].append(np.array(PINN.neg_model.weights))
                 history["negative"]["iteration"].append(j)
 
                 tqdm.write("\033[1mNegative\033[0m")

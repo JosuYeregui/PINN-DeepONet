@@ -219,7 +219,7 @@ if __name__ == "__main__":
                 history["positive"]["losses_tr"].append(losses_tr)
                 history["positive"]["loss_val"].append(loss_tot_val)
                 history["positive"]["losses_val"].append(losses_val)
-                history["positive"]["weights"].append(PINN.pos_model.weights)
+                history["positive"]["weights"].append(np.array(PINN.pos_model.weights))
                 history["positive"]["iteration"].append(j)
 
                 tqdm.write(f"\033[3mIteration: {j}\033[0m")
@@ -244,7 +244,7 @@ if __name__ == "__main__":
                 history["negative"]["losses_tr"].append(losses_tr)
                 history["negative"]["loss_val"].append(loss_tot_val)
                 history["negative"]["losses_val"].append(losses_val)
-                history["negative"]["weights"].append(PINN.neg_model.weights)
+                history["negative"]["weights"].append(np.array(PINN.neg_model.weights))
                 history["negative"]["iteration"].append(j)
 
                 tqdm.write("\033[1mNegative\033[0m")

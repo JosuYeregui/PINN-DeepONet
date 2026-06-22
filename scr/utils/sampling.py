@@ -18,7 +18,7 @@ class Sampler:
         self.update_samples(init_point_data, current_func, t_max)
 
     def sample(self, cond):
-        return torch.tensor(self.points[cond], requires_grad=True).to(self.device)
+        return torch.tensor(self.points[cond], requires_grad=True, dtype=torch.float32).to(self.device)
 
     def get_points(self, cond):
         return self.points_tch[cond]
@@ -121,7 +121,7 @@ class Sampler:
         return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
 
     def _cast_torch(self, array):
-        return torch.tensor(array, requires_grad=True).to(self.device)
+        return torch.tensor(array, requires_grad=True, dtype=torch.float32).to(self.device)
 
 
 class Sampler_DONet(Sampler):

@@ -5,9 +5,12 @@ import matplotlib.pyplot as plt
 import pybamm
 
 
-elec_model = Electrolyte_Split([1., 1000., 1000.])
+#elec_model = Electrolyte_Split([1., 0.01, 1., 1000., 1000., 100, 100])
+elec_model = Electrolyte_Split([1., 1, 1., 1., 1., 1, 1])
+#elec_model = Electrolyte_Split([1., 0.01, 1., 1000., 1000., 100., 100.])
 #optimizer = NTK_Adaptive(elec_model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
-optimizer = Adam_Custom(elec_model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
+# optimizer = Adam_Custom(elec_model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
+optimizer = NTK_Adaptive(elec_model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
 
 for epoch in range(1000):
     data_t = torch.rand((1000, 1), requires_grad=True)
@@ -72,8 +75,8 @@ c = torch.cat([neg_c, sep_c, pos_c], dim=0)
 
 # Plotting the results
 plt.figure(figsize=(12, 6))
-plt.plot(x, c - c[0], label='PINN', color='black')
-plt.plot(pos/L, ce_tend - ce_tend[0], label='Pybamm', color='red')
+plt.plot(x, c, label='PINN', color='black')
+plt.plot(pos/L, ce_tend, label='Pybamm', color='red')
 plt.xlabel('x (normalized)')
 plt.ylabel('Concentration (normalized)')
 plt.title('Electrolyte Concentration Profiles')

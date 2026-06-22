@@ -24,6 +24,9 @@ def RMSELoss(yhat, y):
 if __name__ == "__main__":
 
     parameters = load_params()
+    parameters["por_p"] = parameters["por_n"]
+    parameters["por_s"] = parameters["por_n"]
+
 
     # training_points = {"PDE": 1000, "IV": 50, "BC_Center": 50, "BC_Surf": 50}
     training_points = {"PDE": {"type": "PDE", "N": 1000},
@@ -36,9 +39,35 @@ if __name__ == "__main__":
                          "BC_Left": {"type": "BC", "N": 10, "BC_pos": 0.},
                          "BC_Right": {"type": "BC", "N": 10, "BC_pos": 1.}}
 
-    betas_tr = [1]#[0.2, 0.3, 0.5, 0.7, 0.75, 0.8, 0.85, 0.95, 1.1]
+    betas_tr = [1, 0.2, 0.3, 0.5, 0.7, 0.75, 0.8, 0.85, 0.95, 1.1]
     betas_val = [0.4, 0.6]
     test_beta = 1.
+
+    # Evaluation
+    # param = pybamm.ParameterValues("ORegan2022")
+    param = pybamm.ParameterValues("Chen2020")
+    param['Electrolyte diffusivity [m2.s-1]'] = lambda c,T: 1.7694e-10  # 4.862e-10 #  8.794e-11 * (c*1000)**2 - 3.972e-10 * (c*1000)**2 + 4.862e-10#
+    param['Positive electrode porosity'] = param['Negative electrode porosity']
+    param['Separator porosity'] = param['Negative electrode porosity']
+
+    # param['Electrolyte diffusivity [m2.s-1]'] = lambda c, T:  8.794e-11 * (c/1000)**2 - 3.972e-10 * (c/1000) + 4.862e-10
+    PBM_model = pybamm.lithium_ion.SPMe()
+    experiment = pybamm.Experiment(["Discharge at " + str(test_beta) + "C for 100000 seconds or until 2.5 V"])
+    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
+    sol = sim.solve(initial_soc=1)
+
+    ce = sol["Electrolyte concentration [mol.m-3]"]
+
+    # pos_SPM_r0 = sol['X-averaged positive particle concentration'].entries[0, :]
+    # pos_SPM_r1 = sol['X-averaged positive particle concentration'].entries[-1, :]
+
+    t = sol["Time [s]"].entries
+    x = sol["x [m]"].entries[:, 0]
+
+    ce_t0 = ce(t=t[0], x=x) / 1000
+    ce_tend = ce(t=t[-1], x=x) / 1000
+
+    t_end = t[-1]
 
     from torch import nn
 
@@ -46,7 +75,6 @@ if __name__ == "__main__":
                               dim_out=1, dropout=0., activation=nn.SiLU)
     elec_model = Electrolyte(model_elec, parameters, [1., 1., 1.], criterion=RMSELoss)
     optimizer = NTK_Adaptive(elec_model.model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
-
     # PINN.neg_model.params["as_n"] = torch.nn.Parameter(torch.tensor([parameters["as_n"]]), requires_grad=False)
 
     Sampler_tr = Sampler(training_points, constant(1.),  mode="quasi")
@@ -55,7 +83,7 @@ if __name__ == "__main__":
     history = {"electrolyte":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(1000 + 1):
+    for j in range(20000 + 1):
         t = time.time()
         rate_tr = np.random.choice(betas_tr)
         rate_val = np.random.choice(betas_val)
@@ -91,7 +119,9 @@ if __name__ == "__main__":
     # with open('../models/TL_HardIV.pkl', 'wb') as fp:
     #     pickle.dump(history, fp)
 
-    #elec_model.save_model(os.path.join("../models/elec_model.pt"))
+    elec_model.save_model(os.path.join("../../models/elec_model_porsame.pt"))
+
+    t = np.linspace(0, t_end, num=len(ce_tend)) / elec_model.tc
 
     # Plot
     plt.figure()
@@ -103,30 +133,7 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    # Evaluation
-    # param = pybamm.ParameterValues("ORegan2022")
-    param = pybamm.ParameterValues("Chen2020")
-    param['Electrolyte diffusivity [m2.s-1]'] = lambda c, T:  1.7694e-10  # 4.862e-10 #  8.794e-11 * (c*1000)**2 - 3.972e-10 * (c*1000)**2 + 4.862e-10#
-    # param['Electrolyte diffusivity [m2.s-1]'] = lambda c, T:  8.794e-11 * (c/1000)**2 - 3.972e-10 * (c/1000) + 4.862e-10
-    PBM_model = pybamm.lithium_ion.SPMe()
-    experiment = pybamm.Experiment(["Discharge at " + str(test_beta) + "C for 100000 seconds or until 2.5 V"])
-    sim = pybamm.Simulation(PBM_model, experiment=experiment, parameter_values=param)
-    sol = sim.solve(initial_soc=1)
 
-    ce = sol["Electrolyte concentration [mol.m-3]"]
-
-    # pos_SPM_r0 = sol['X-averaged positive particle concentration'].entries[0, :]
-    # pos_SPM_r1 = sol['X-averaged positive particle concentration'].entries[-1, :]
-
-    t = sol["Time [s]"].entries
-    x = sol["x [m]"].entries[:, 0]
-
-    ce_t0 = ce(t=t[0], x=x) /1000
-    ce_tend = ce(t=t[-1], x=x) /1000
-
-    t_end = t[-1]
-
-    t = np.linspace(0, t_end, num=len(ce_tend)) / elec_model.tc
 
     #elec_model.update_tc(1.)
 
@@ -204,30 +211,30 @@ if __name__ == "__main__":
     plot_area(pos_dcdr, 'Oranges', 'dcdr')
 
     # Create a gif from the elec_model from t=0 to t=1
-    import imageio
+#    import imageio
       # Create a directory to save the images
-    os.makedirs('images', exist_ok=True)
+#    os.makedirs('images', exist_ok=True)
 
-    # Generate the images
-    for i in range(1000):
-        t = i / 1000
-        bcs_sample_t = torch.ones_like(bcs_sample_x) * t
-        bcs_sample = torch.stack([bcs_sample_t, bcs_sample_x, bcs_sample_I]).t()
-        ce_PINN_tend = elec_model(bcs_sample)
-        plt.figure()
-        plt.grid()
-        plt.plot(bcs_sample_x.detach().numpy(), ce_PINN_tend.detach().numpy(),
-                 "r", label="PINN")
-        plt.legend()
-        plt.xlabel("x [-]")
-        plt.ylabel("c_e [-]")
-        plt.title(f"t = {t:.2f}")
-        plt.ylim(0.5, 6.)
-        plt.savefig(f'images/frame_{i}.png')
-        plt.close()
-
-    # Create a gif from the images
-    images = []
-    for i in range(200):
-        images.append(imageio.imread(f'images/frame_{i}.png'))
-    imageio.mimsave('electrolyte_cur.gif', images, fps=30)
+    # # Generate the images
+    # for i in range(1000):
+    #     t = i / 1000
+    #     bcs_sample_t = torch.ones_like(bcs_sample_x) * t
+    #     bcs_sample = torch.stack([bcs_sample_t, bcs_sample_x, bcs_sample_I]).t()
+    #     ce_PINN_tend = elec_model(bcs_sample)
+    #     plt.figure()
+    #     plt.grid()
+    #     plt.plot(bcs_sample_x.detach().numpy(), ce_PINN_tend.detach().numpy(),
+    #              "r", label="PINN")
+    #     plt.legend()
+    #     plt.xlabel("x [-]")
+    #     plt.ylabel("c_e [-]")
+    #     plt.title(f"t = {t:.2f}")
+    #     plt.ylim(0.5, 6.)
+    #     plt.savefig(f'images/frame_{i}.png')
+    #     plt.close()
+    #
+    # # Create a gif from the images
+    # images = []
+    # for i in range(200):
+    #     images.append(imageio.imread(f'images/frame_{i}.png'))
+    # imageio.mimsave('electrolyte_cur.gif', images, fps=30)
