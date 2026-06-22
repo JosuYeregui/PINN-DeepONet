@@ -11,10 +11,16 @@ import numpy as np
 import pickle
 import time
 import os
-
 import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
+
+DEVICE = "auto"  # "cpu" | "cuda" | "auto"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if DEVICE == "auto" else torch.device(DEVICE)
+print("Device: ", device, "\n")
+
+if device.type == "cpu":
+    torch.set_num_threads(torch.get_num_threads())
 
 
 def RMSELoss(yhat, y):
@@ -72,31 +78,24 @@ if __name__ == "__main__":
     from torch import nn
 
     model_elec = NN_TL_Diffusion(general_layers=[64, 64, 64, 64], fine_layers=[32, 32], dim_in=3, dim_int=32,
-                              dim_out=1, dropout=0., activation=nn.SiLU)
+                              dim_out=1, dropout=0., activation=nn.SiLU).to(device)
     elec_model = Electrolyte(model_elec, parameters, [1., 1., 1.], criterion=RMSELoss)
-    optimizer = NTK_Adaptive(elec_model.model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)})
-    # PINN.neg_model.params["as_n"] = torch.nn.Parameter(torch.tensor([parameters["as_n"]]), requires_grad=False)
+    optimizer = NTK_Adaptive(elec_model.model.parameters(), elec_model.weights, adam_param = {'lr': 0.0005, 'betas': (0.9, 0.999)}, device=device)
 
-    Sampler_tr = Sampler(training_points, constant(1.),  mode="quasi")
-    Sampler_val = Sampler(validation_points, constant(1.),  mode="quasi")
+    Sampler_tr = Sampler(training_points, constant(1.), mode="quasi", device=device)
+    Sampler_val = Sampler(validation_points, constant(1.), mode="quasi", device=device)
 
+    EPOCH = 20000
     history = {"electrolyte":{"loss_tr": [], "losses_tr": [], "loss_val": [], "losses_val": [], "iteration": []}}
 
     print("Iter \t\t PDE \t IV \t BC Centre \t BC Surf \t\t\t PDE \t IV \t BC Centre \t BC Surf")
-    for j in range(20000 + 1):
+    for j in range(EPOCH + 1):
         t = time.time()
-        rate_tr = np.random.choice(betas_tr)
         rate_val = np.random.choice(betas_val)
 
-        # Sampler_tr.update_current_func(constant(rate_tr))
-        # Sampler_tr.update_t(rate_tr)
-        # Sampler_val.update_current_func(constant(rate_val))
-        # Sampler_val.update_t(rate_val)
-        Sampler_tr.update_samples(training_points, constant(rate_tr), 1./rate_tr)
+        # Each epoch batches ALL training betas in one forward pass for GPU efficiency.
+        Sampler_tr.update_samples_batched(training_points, betas_tr)
         Sampler_val.update_samples(validation_points, constant(rate_val), 1. / rate_val)
-
-        # optimizer_p_w.zero_grad()
-        # optimizer_n_w.zero_grad()
 
         losses_tr = elec_model.train_step(optimizer, Sampler_tr)
         losses_val = elec_model.evaluate(Sampler_val)

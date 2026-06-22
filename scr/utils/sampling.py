@@ -120,6 +120,39 @@ class Sampler:
         space = [(0.0, 1.0)] * dimension
         return np.asarray(sampler.generate(space, n_samples + skip)[skip:])
 
+    def update_samples_batched(self, point_data, beta_list):
+        """
+        Samples for every beta in beta_list and stacks them into one tensor per condition.
+        Each beta contributes N collocation points; the final tensor has K*N rows.
+        Useful for GPU training where a single large forward pass is more efficient than K small ones.
+        """
+        per_cond = {cond: [] for cond in point_data}
+
+        for beta in beta_list:
+            t_max = 1. / np.abs(beta)
+            cur_fn = lambda t, b=beta: np.ones(np.asarray(t).shape, dtype=np.float32) * b
+
+            for cond in point_data:
+                cfg = point_data[cond]
+                if cfg["type"] == "IV":
+                    pts = self.update_iv(cfg["N"])
+                elif cfg["type"] == "BC":
+                    pts = self.update_bc(cfg["N"], cfg["BC_pos"])
+                elif cfg["type"] == "PDE":
+                    pts = self.update_pde(cfg["N"])
+                else:
+                    raise NotImplementedError(f"Sampling type not supported: {cfg['type']}")
+
+                pts[:, 0] *= t_max
+                cur = cur_fn(pts[:, 0] * 3600.)
+                pts = np.concatenate([pts, cur.reshape(-1, 1)], axis=1).astype(np.float32)
+                per_cond[cond].append(pts)
+
+        for cond in point_data:
+            stacked = np.concatenate(per_cond[cond], axis=0)
+            self.points[cond] = stacked
+            self.points_tch[cond] = self._cast_torch(stacked)
+
     def _cast_torch(self, array):
         return torch.tensor(array, requires_grad=True, dtype=torch.float32).to(self.device)
 
@@ -135,13 +168,67 @@ class Sampler_DONet(Sampler):
         self.t = np.linspace(0, 1, branch_samp, dtype=np.float32)
         self.N = current_func(self.t)
         self.N_tch = self._cast_torch(self.N)
+        self._is_batched = False
 
     def sample(self, cond, **kwargs):
-
+        if self._is_batched:
+            trunk_pts = self.points_tch[cond]
+            n_pts = self._n_per_cond[cond]
+            # Repeat each beta's N for its corresponding n_pts trunk points
+            N_rep = np.repeat(self._N_unique, n_pts, axis=0)  # [K*n_pts, branch_samp]
+            N_tch = self._cast_torch(N_rep)
+            return (trunk_pts, N_tch)
         return (self.points_tch[cond], self.N_tch)
+
+    def update_samples(self, point_data, current_func, t_max):
+        """Single-beta update; resets batched mode."""
+        super().update_samples(point_data, current_func, t_max)
+        self._is_batched = False
+
+    def update_samples_batched(self, point_data, beta_list):
+        """
+        Samples for every beta in beta_list in a single batched tensor.
+        Trunk points are stacked [K*n_pts, 3]; the branch net input N is stored as
+        [K, branch_samp] and repeated per condition on each sample() call so the
+        model sees one large vectorised batch instead of K sequential forward passes.
+        """
+        per_cond = {cond: [] for cond in point_data}
+        N_list = []
+
+        for beta in beta_list:
+            t_max = 1. / np.abs(beta)
+            cur_fn = lambda t, b=beta: np.ones(np.asarray(t).shape, dtype=np.float32) * b
+
+            for cond in point_data:
+                cfg = point_data[cond]
+                if cfg["type"] == "IV":
+                    pts = self.update_iv(cfg["N"])
+                elif cfg["type"] == "BC":
+                    pts = self.update_bc(cfg["N"], cfg["BC_pos"])
+                elif cfg["type"] == "PDE":
+                    pts = self.update_pde(cfg["N"])
+                else:
+                    raise NotImplementedError(f"Sampling type not supported: {cfg['type']}")
+
+                pts[:, 0] *= t_max
+                cur = cur_fn(pts[:, 0] * 3600.)
+                pts = np.concatenate([pts, cur.reshape(-1, 1)], axis=1).astype(np.float32)
+                per_cond[cond].append(pts)
+
+            N_list.append(cur_fn(self.t))
+
+        for cond in point_data:
+            stacked = np.concatenate(per_cond[cond], axis=0)
+            self.points[cond] = stacked
+            self.points_tch[cond] = self._cast_torch(stacked)
+
+        self._N_unique = np.stack(N_list, axis=0).astype(np.float32)  # [K, branch_samp]
+        self._n_per_cond = {cond: point_data[cond]["N"] for cond in point_data}
+        self._is_batched = True
 
     def update_current_func(self, current_func):
         self.current_func = current_func
+        self._is_batched = False
 
         for cond in self.points:
             self.points[cond][:, 2] = self.current_func(self.points[cond][:, 0] * 3600)

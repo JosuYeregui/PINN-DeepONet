@@ -23,10 +23,13 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 
 np.set_printoptions(precision=3)
-device = torch.device("cpu" if torch.cuda.is_available() else "cpu")
+
+DEVICE = "auto"  # "cpu" | "cuda" | "auto"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") if DEVICE == "auto" else torch.device(DEVICE)
 print("Device: ", device, "\n")
-# print(torch.get_num_threads())
-torch.set_num_threads(1)
+
+if device.type == "cpu":
+    torch.set_num_threads(torch.get_num_threads())
 
 
 def store_and_print(path, j, PINN):
@@ -208,36 +211,23 @@ if __name__ == "__main__":
               smoothing=0.1) as pbar:
         for j in range(EPOCH):
 
-            # t = time.time()
-            rate_tr = np.random.choice(betas_tr)
-            rate_val = np.random.choice(betas_val)
-            # rate_tr *= -1
-            # rate_val *= -1
-            # PINN.neg_model.params["SOC_0"] = 0.
-            # PINN.pos_model.params["SOC_0"] = 0.
-
-            if np.random.rand() < 0.5:
-                rate_tr *= -1
-                rate_val *= -1
+            # Each epoch uses ALL training betas at once (one batched forward pass per electrode).
+            # Randomly choose charge or discharge so SOC_0 is consistent across the batch.
+            is_charging = np.random.rand() < 0.5
+            if is_charging:
+                batch_betas_tr = [-b for b in betas_tr]
                 PINN.neg_model.params["SOC_0"] = 0.
                 PINN.pos_model.params["SOC_0"] = 0.
             else:
+                batch_betas_tr = list(betas_tr)
                 PINN.neg_model.params["SOC_0"] = 1.
                 PINN.pos_model.params["SOC_0"] = 1.
 
-            # Sampler_tr.update_current_func(constant(rate_tr))
-            # Sampler_tr.update_t(rate_tr)
-            # Sampler_val.update_current_func(constant(rate_val))
-            # Sampler_val.update_t(rate_val)
+            rate_val = np.random.choice(betas_val) * (-1 if is_charging else 1)
 
-            Sampler_tr.update_samples(training_points, constant(rate_tr), 1. / np.abs(rate_tr))
+            Sampler_tr.update_samples_batched(training_points, batch_betas_tr)
             Sampler_val.update_samples(validation_points, constant(rate_val), 1. / np.abs(rate_val))
-
-            Sampler_tr.update_N(constant(rate_tr))
             Sampler_val.update_N(constant(rate_val))
-
-            # optimizer_p_w.zero_grad()
-            # optimizer_n_w.zero_grad()
 
             losses_tr = PINN.pos_model.train_step(optimizer_p, Sampler_tr)
             losses_val = PINN.pos_model.evaluate(Sampler_val)
